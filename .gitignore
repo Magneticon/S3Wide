@@ -1,0 +1,20 @@
+# Local/proprietary dependencies
+external/win31ddk/
+external/msvc/
+external/s3-original/
+external/s3-docs/
+external/dosbox-x/
+external/vbesvga/
+
+# Generated artifacts
+output/*
+!output/.gitkeep
+
+# Local VM/test images
+test/vm/
+test/*.img
+test/*.vhd
+test/*.vhdx
+
+# Local overrides
+*.local.conf
