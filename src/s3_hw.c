@@ -65,11 +65,6 @@ int S3_Select64KBank(S3_REGISTER_IO S3_FAR *io, S3_U32 bank)
     return 1;
 }
 
-static S3_U8 s3_expand_bits(S3_U8 value, S3_U16 levels)
-{
-    return (S3_U8)(((S3_U16)value * 255 + (levels - 1) / 2) / (levels - 1));
-}
-
 static S3_U8 s3_rgb8_to_dac6(S3_U8 value)
 {
     return (S3_U8)(((S3_U16)value * 63 + 127) / 255);
@@ -84,12 +79,12 @@ int S3_ProgramRGB332Palette6(S3_REGISTER_IO S3_FAR *io)
 
     io->write_dac(io->context, S3_DAC_WRITE_INDEX, 0);
     for (index = 0; index < 256; ++index) {
-        S3_U8 red = s3_expand_bits((S3_U8)(index >> 5), 8);
-        S3_U8 green = s3_expand_bits((S3_U8)((index >> 2) & 7), 8);
-        S3_U8 blue = s3_expand_bits((S3_U8)(index & 3), 4);
-        io->write_dac(io->context, S3_DAC_DATA, s3_rgb8_to_dac6(red));
-        io->write_dac(io->context, S3_DAC_DATA, s3_rgb8_to_dac6(green));
-        io->write_dac(io->context, S3_DAC_DATA, s3_rgb8_to_dac6(blue));
+        /* The driver's colour table, including the exact system colours. */
+        S3_U32 rgb = 0;
+        (void)S3_ColorIndexToRGB((S3_U8)index, &rgb);
+        io->write_dac(io->context, S3_DAC_DATA, s3_rgb8_to_dac6((S3_U8)rgb));
+        io->write_dac(io->context, S3_DAC_DATA, s3_rgb8_to_dac6((S3_U8)(rgb >> 8)));
+        io->write_dac(io->context, S3_DAC_DATA, s3_rgb8_to_dac6((S3_U8)(rgb >> 16)));
     }
     return 1;
 }

@@ -12,6 +12,7 @@
 #include "s3_dib.h"
 #include "s3_text.h"
 #include "s3_output.h"
+#include "s3_cursor.h"
 
 static int failures;
 
@@ -2196,6 +2197,58 @@ static void test_output_scanlines(void)
     CHECK(bits[0] == 0xF0 && bits[3] == 0xF0 && bits[4] == 0x0F);
 }
 
+static void test_cursor_pattern(void)
+{
+    struct {
+        S3_CURSORSHAPE16 header;
+        S3_U8 masks[2 * 2 * 2]; /* 16x2 AND mask, then 16x2 XOR mask */
+    } shape;
+    S3_U8 pattern[S3_HW_CURSOR_BYTES];
+
+    memset(&shape, 0, sizeof(shape));
+    shape.header.csWidth = 16;
+    shape.header.csHeight = 2;
+    shape.header.csWidthBytes = 2;
+    shape.header.csColor = 0x0101;
+    /* Row 0: pixel 0 black (AND 0 XOR 0), pixel 9 white (AND 0 XOR 1),
+       pixel 15 inverted (AND 1 XOR 1); everything else transparent. */
+    shape.masks[0] = 0x7F; shape.masks[1] = 0xBF;  /* AND row 0 */
+    shape.masks[2] = 0xFF; shape.masks[3] = 0xFF;  /* AND row 1 */
+    shape.masks[4] = 0x00; shape.masks[5] = 0x41;  /* XOR row 0 */
+    shape.masks[6] = 0x00; shape.masks[7] = 0x00;  /* XOR row 1 */
+    CHECK(S3_CursorPattern(&shape.header, pattern));
+    CHECK(pattern[0] == 0x7F && pattern[1] == 0xBF);  /* AND pair, group 0 */
+    CHECK(pattern[2] == 0x00 && pattern[3] == 0x41);  /* XOR pair, group 0 */
+    CHECK(pattern[4] == 0xFF && pattern[6] == 0x00);  /* group 1 transparent */
+    CHECK(pattern[16] == 0xFF && pattern[18] == 0x00); /* row 1 transparent */
+    CHECK(pattern[1023] == 0x00 && pattern[1021] == 0xFF);
+    shape.header.csWidthBytes = 1;
+    CHECK(!S3_CursorPattern(&shape.header, pattern));
+}
+
+static void test_system_colors_exact(void)
+{
+    static const S3_U32 statics[20] = {
+        0x000000UL, 0x000080UL, 0x008000UL, 0x008080UL, 0x800000UL,
+        0x800080UL, 0x808000UL, 0xC0C0C0UL, 0xC0DCC0UL, 0xF0CAA6UL,
+        0xF0FBFFUL, 0xA4A0A0UL, 0x808080UL, 0x0000FFUL, 0x00FF00UL,
+        0x00FFFFUL, 0xFF0000UL, 0xFF00FFUL, 0xFFFF00UL, 0xFFFFFFUL
+    };
+    S3_U8 index, seen[256];
+    S3_U32 rgb;
+    unsigned int i;
+
+    memset(seen, 0, sizeof(seen));
+    /* Every static colour maps to its own index and back exactly. */
+    for (i = 0; i < 20; ++i) {
+        CHECK(S3_RGBToColorIndex(statics[i], &index));
+        CHECK(S3_ColorIndexToRGB(index, &rgb) && rgb == statics[i]);
+        CHECK(!seen[index]);
+        seen[index] = 1;
+    }
+    CHECK(S3_RGBToColorIndex(0xC0C0C0UL, &index) && index == 0xB6);
+}
+
 int main(void)
 {
     test_full_vga_bridge_snapshot();
@@ -2208,6 +2261,8 @@ int main(void)
     test_dib_conversions();
     test_raster_text();
     test_output_scanlines();
+    test_cursor_pattern();
+    test_system_colors_exact();
     test_gdi_bitmap_and_pixel_path();
     test_setdibits_to_device_adapter();
     test_banded_dib_upload_reference();

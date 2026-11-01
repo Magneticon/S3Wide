@@ -3,6 +3,11 @@
 #include "s3_dib.h"
 #include "s3_text.h"
 #include "s3_raster.h"
+#include "s3_cursor.h"
+#include "s3_win16_hw.h"
+
+int S3_DisplayWriteOffscreen(S3_U32 offset, const S3_U8 S3_FAR *data,
+                             S3_U16 bytes);
 
 /* Remaining DDA entry points of the WfW 3.11 stock display-driver export
    table. Signatures follow the Windows 98 DDK reference for the same
@@ -220,18 +225,48 @@ S3_U16 S3_FAR S3_PASCAL Inquire(S3_CURSORINFO16 S3_FAR *cursor_info)
     return (S3_U16)sizeof(S3_CURSORINFO16);
 }
 
+/* Hardware cursor state; MoveCursor runs at mouse-interrupt time. */
+static S3_U8 s3_cursor_pattern[S3_HW_CURSOR_BYTES];
+static S3_I16 s3_cursor_hot_x, s3_cursor_hot_y;
+static S3_I16 s3_cursor_x, s3_cursor_y;
+static volatile S3_U16 s3_cursor_visible;
+
 S3_U16 S3_FAR S3_PASCAL SetCursor(void S3_FAR *cursor_shape)
 {
-    S3_TRACE_EVENT("SetCursor", cursor_shape == (void S3_FAR *)0, 0);
+    const S3_CURSORSHAPE16 S3_FAR *shape = (const S3_CURSORSHAPE16 S3_FAR *)cursor_shape;
+
+    S3_TRACE_EVENT("SetCursor", shape == (const S3_CURSORSHAPE16 S3_FAR *)0, 0);
+    s3_cursor_visible = 0;
+    S3_HwCursorEnable(0);
+    if (shape == (const S3_CURSORSHAPE16 S3_FAR *)0) {
+        return 1; /* hide */
+    }
+    if (!S3_CursorPattern(shape, s3_cursor_pattern) ||
+        !S3_DisplayWriteOffscreen(S3_HW_CURSOR_OFFSET, s3_cursor_pattern,
+                                  S3_HW_CURSOR_BYTES)) {
+        S3_TRACE_EVENT("SetCursor.fail", shape->csWidth, shape->csHeight);
+        return 0;
+    }
+    s3_cursor_hot_x = shape->csHotX;
+    s3_cursor_hot_y = shape->csHotY;
+    S3_HwCursorSetup();
+    S3_HwCursorMove((S3_I16)(s3_cursor_x - s3_cursor_hot_x),
+                    (S3_I16)(s3_cursor_y - s3_cursor_hot_y));
+    S3_HwCursorEnable(1);
+    s3_cursor_visible = 1;
     return 1;
 }
 
 /* MoveCursor and CheckCursor run at mouse and timer interrupt time: they
-   must not trace (file I/O would re-enter DOS). No cursor is drawn yet. */
+   must not trace (file I/O would re-enter DOS). The hardware cursor needs
+   no redraw, so CheckCursor has nothing to do. */
 void S3_FAR S3_PASCAL MoveCursor(S3_I16 x, S3_I16 y)
 {
-    (void)x;
-    (void)y;
+    s3_cursor_x = x;
+    s3_cursor_y = y;
+    if (s3_cursor_visible) {
+        S3_HwCursorMove((S3_I16)(x - s3_cursor_hot_x), (S3_I16)(y - s3_cursor_hot_y));
+    }
 }
 
 void S3_FAR S3_PASCAL CheckCursor(void)

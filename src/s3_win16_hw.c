@@ -181,6 +181,7 @@ static int S3_FAR S3_PASCAL s3_program_mode(void S3_FAR *context)
         return 0;
     }
     s3_setup_packed_8bpp();
+    S3_HwCursorEnable(0);
     if (!S3_ProgramRGB332Palette6(&provider->register_io)) {
         S3_TRACE_EVENT("hw.program.fail", 2, 0);
         return 0;
@@ -202,6 +203,7 @@ static int S3_FAR S3_PASCAL s3_restore_mode(void S3_FAR *context,
         bytes < sizeof(S3_SAVED_VGA) || !saved->timing.valid) {
         return 0;
     }
+    S3_HwCursorEnable(0);
     if (!S3_RestoreModeSnapshot(&provider->mode_io, &saved->timing)) {
         S3_TRACE_EVENT("hw.restore.fail", 1, 0);
         return 0;
@@ -233,6 +235,84 @@ static int S3_FAR S3_PASCAL s3_set_bank(void S3_FAR *context, S3_U32 bank)
     S3_PORT_PROVIDER S3_FAR *provider = (S3_PORT_PROVIDER S3_FAR *)context;
     if (provider == (S3_PORT_PROVIDER S3_FAR *)0) return 0;
     return S3_Select64KBank(&provider->register_io, bank);
+}
+
+/* CR45 bit 0 enables the hardware cursor. CR40-CR4F need CR39 = A5h and
+   the S3 VGA registers CR38 = 48h; callers restore the previous locks. */
+static void s3_unlock(S3_U8 S3_FAR *lock1, S3_U8 S3_FAR *lock2)
+{
+    outp(0x3D4, 0x38);
+    *lock1 = (S3_U8)inp(0x3D5);
+    outp(0x3D5, 0x48);
+    outp(0x3D4, 0x39);
+    *lock2 = (S3_U8)inp(0x3D5);
+    outp(0x3D5, 0xA5);
+}
+
+static void s3_relock(S3_U8 lock1, S3_U8 lock2)
+{
+    outp(0x3D4, 0x39);
+    outp(0x3D5, lock2);
+    outp(0x3D4, 0x38);
+    outp(0x3D5, lock1);
+}
+
+void S3_HwCursorSetup(void)
+{
+    S3_U8 index = (S3_U8)inp(0x3D4);
+    S3_U16 start_kb = (S3_U16)(S3_HW_CURSOR_OFFSET >> 10);
+    S3_U8 lock1, lock2;
+
+    s3_unlock(&lock1, &lock2);
+    s3_write_crtc(0, 0x3D4, 0x4C, (S3_U8)((start_kb >> 8) & 0x0F));
+    s3_write_crtc(0, 0x3D4, 0x4D, (S3_U8)start_kb);
+    /* Reading CR45 resets the colour stack pointers. */
+    (void)s3_read_crtc(0, 0x3D4, 0x45);
+    s3_write_crtc(0, 0x3D4, 0x4A, 0xFF);
+    (void)s3_read_crtc(0, 0x3D4, 0x45);
+    s3_write_crtc(0, 0x3D4, 0x4B, 0x00);
+    s3_relock(lock1, lock2);
+    outp(0x3D4, index);
+}
+
+void S3_HwCursorEnable(int enable)
+{
+    S3_U8 index = (S3_U8)inp(0x3D4);
+    S3_U8 lock1, lock2, cr45;
+
+    s3_unlock(&lock1, &lock2);
+    cr45 = s3_read_crtc(0, 0x3D4, 0x45);
+    cr45 = (S3_U8)(enable ? (cr45 | 0x01) : (cr45 & (S3_U8)~0x01));
+    s3_write_crtc(0, 0x3D4, 0x45, cr45);
+    s3_relock(lock1, lock2);
+    outp(0x3D4, index);
+}
+
+void S3_HwCursorMove(S3_I16 x, S3_I16 y)
+{
+    S3_U8 index = (S3_U8)inp(0x3D4);
+    S3_U8 lock1, lock2;
+    S3_U8 offset_x = 0, offset_y = 0;
+
+    /* A cursor partly off the top or left edge starts its pattern later. */
+    if (x < 0) {
+        offset_x = (S3_U8)(-x < 63 ? -x : 63);
+        x = 0;
+    }
+    if (y < 0) {
+        offset_y = (S3_U8)(-y < 63 ? -y : 63);
+        y = 0;
+    }
+    s3_unlock(&lock1, &lock2);
+    s3_write_crtc(0, 0x3D4, 0x4E, offset_x);
+    s3_write_crtc(0, 0x3D4, 0x4F, offset_y);
+    s3_write_crtc(0, 0x3D4, 0x46, (S3_U8)((S3_U16)x >> 8));
+    s3_write_crtc(0, 0x3D4, 0x47, (S3_U8)x);
+    /* The new position takes effect when CR49 (Y low) is written. */
+    s3_write_crtc(0, 0x3D4, 0x48, (S3_U8)((S3_U16)y >> 8));
+    s3_write_crtc(0, 0x3D4, 0x49, (S3_U8)y);
+    s3_relock(lock1, lock2);
+    outp(0x3D4, index);
 }
 
 int S3_Win16PortModeOps(S3_BRIDGE_OPS S3_FAR *ops)

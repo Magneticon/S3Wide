@@ -48,6 +48,25 @@ static int s3_enable_display(S3_PDEV S3_FAR *device, S3_U16 style)
 }
 #endif
 
+#if !defined(S3_HOST_TEST)
+/* Copy bytes into video memory outside the visible framebuffer (one bank).
+   The drawing surface remaps its bank on its next access. */
+int S3_DisplayWriteOffscreen(S3_U32 offset, const S3_U8 S3_FAR *data,
+                             S3_U16 bytes)
+{
+    S3_U8 S3_FAR *window;
+    if (!s3_display_runtime.enabled ||
+        (offset & 0xFFFFUL) + bytes > 0x10000UL ||
+        !S3_Win16BridgeSetBank(&s3_display_runtime.bridge, offset >> 16)) {
+        return 0;
+    }
+    window = (S3_U8 S3_FAR *)s3_display_runtime.bridge.window;
+    _fmemcpy(window + (S3_U16)offset, data, bytes);
+    s3_display_runtime.surface.current_bank = 0xFFFFFFFFUL;
+    return 1;
+}
+#endif
+
 int S3_FAR S3_PASCAL Enable(void S3_FAR *device, S3_I16 style,
                             char S3_FAR *device_type,
                             char S3_FAR *output_file,
