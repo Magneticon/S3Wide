@@ -6,6 +6,13 @@ if [ -z "${WATCOM:-}" ]; then
     exit 2
 fi
 OWBIN=${OWBIN:-binl64}
+CC=${CC:-gcc}
+PYTHON=${PYTHON:-python3}
+# Windows-hosted Watcom tools (binnt, binnt64, binw) read ';'-separated INCLUDE.
+case "$OWBIN" in
+    binnt*|binw) incsep=';' ;;
+    *) incsep=':' ;;
+esac
 for tool in wcc wlink wrc; do
     if [ ! -x "$WATCOM/$OWBIN/$tool" ]; then
         echo "missing executable: $WATCOM/$OWBIN/$tool" >&2
@@ -14,7 +21,7 @@ for tool in wcc wlink wrc; do
 done
 
 export PATH="$WATCOM/$OWBIN:$PATH"
-export INCLUDE="$WATCOM/h${INCLUDE:+:$INCLUDE}"
+export INCLUDE="$WATCOM/h${INCLUDE:+$incsep$INCLUDE}"
 mkdir -p build
 rm -f build/*.obj build/driver_smoke.res build/s3wide_driver.dll build/host_checks
 
@@ -31,9 +38,10 @@ wcc -q -bt=windows -mc -zu -zc -i=include -fo=build/s3_gdi_stubs.obj src/s3_gdi_
 wrc -q -r -bt=windows -fo=build/driver_smoke.res src/driver_smoke.rc
 cp "$WATCOM/lib286/win/libentry.obj" build/libentry.obj
 wlink @src/driver_smoke.lnk
-python3 inspect_ne.py build/s3wide_driver.dll build/driver_smoke.map > build/inspection.txt
+"$PYTHON" inspect_ne.py build/s3wide_driver.dll build/driver_smoke.map > build/inspection.txt
 cat build/inspection.txt
-gcc -std=c89 -Wall -Wextra -Werror -DS3_HOST_TEST -Iinclude \
+# The host compiler must not see Watcom's headers (clang on Windows reads INCLUDE).
+env -u INCLUDE "$CC" -std=c89 -Wall -Wextra -Werror -DS3_HOST_TEST -Iinclude \
     src/s3_gdiinfo.c src/s3_color.c src/s3_surface.c src/s3_exports.c \
     src/s3_gdi_stubs.c \
     src/s3_hw.c src/s3_vga_state.c src/s3_win16_bridge.c src/s3_device.c tests/host_test.c \

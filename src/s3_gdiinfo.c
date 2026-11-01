@@ -52,8 +52,10 @@ int S3_BuildGDIInfo(S3_GDIINFO S3_FAR *info)
 
     s3_set_point(&info->dpMLoWin, 3390, 1910);
     s3_set_point(&info->dpMLoVpt, 1280, -720);
-    s3_set_point(&info->dpMHiWin, 33900, 19100);
-    s3_set_point(&info->dpMHiVpt, 1280, -720);
+    /* 33900 x 0.01 mm overflows a signed 16-bit extent; halve both members
+       so the metric high-resolution pair keeps the exact low-metric ratio. */
+    s3_set_point(&info->dpMHiWin, 16950, 9550);
+    s3_set_point(&info->dpMHiVpt, 640, -360);
     s3_set_point(&info->dpELoWin, 8475, 4775);
     s3_set_point(&info->dpELoVpt, 8128, -4572);
     /* Scale both members by 160 to keep the English high-resolution pair in

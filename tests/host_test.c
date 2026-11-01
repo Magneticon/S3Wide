@@ -364,6 +364,15 @@ static void test_gdi_contract(void)
     CHECK(info.dpBitsPixel == 8 && info.dpPlanes == 1);
     CHECK(info.dpDEVICEsize == sizeof(S3_PDEV));
     CHECK(info.dpRaster == 0);
+    CHECK(info.dpMLoWin.x > 0 && info.dpMLoWin.y > 0);
+    CHECK(info.dpMHiWin.x > 0 && info.dpMHiWin.y > 0);
+    CHECK(info.dpELoWin.x > 0 && info.dpELoWin.y > 0);
+    CHECK(info.dpEHiWin.x > 0 && info.dpEHiWin.y > 0);
+    CHECK(info.dpTwpWin.x > 0 && info.dpTwpWin.y > 0);
+    CHECK((long)info.dpMHiWin.x * info.dpMLoVpt.x ==
+          10L * info.dpMLoWin.x * info.dpMHiVpt.x);
+    CHECK((long)info.dpMHiWin.y * info.dpMLoVpt.y ==
+          10L * info.dpMLoWin.y * info.dpMHiVpt.y);
     CHECK(S3_InitializePDEV(&pdev));
     CHECK(pdev.pdType != 0);
     CHECK(pdev.width == 1280 && pdev.height == 720);

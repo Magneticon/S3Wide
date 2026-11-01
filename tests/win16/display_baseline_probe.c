@@ -1,0 +1,198 @@
+#include <windows.h>
+#include <string.h>
+
+/* Win16 display baseline probe.
+
+   Records what Windows reports for the active display driver, reads the
+   screen back through GDI into a 24-bpp BMP, then ends the Windows session.
+   The readback goes through the display driver under test, so it is
+   complementary to, not a replacement for, an emulator-side capture. */
+
+#define RESULT_PATH "D:\\OUTPUT\\RESULT.TXT"
+#define SCREEN_PATH "D:\\OUTPUT\\SCREEN.BMP"
+#define SETTLE_MS 8000UL
+#define BAND_ROWS 16
+
+static HFILE result_file = HFILE_ERROR;
+
+static void put_line(LPCSTR line)
+{
+    if (result_file != HFILE_ERROR) {
+        _lwrite(result_file, line, lstrlen(line));
+        _lwrite(result_file, "\r\n", 2);
+    }
+}
+
+static void put_int(LPCSTR key, long value)
+{
+    char line[96];
+    wsprintf(line, "%s=%ld", key, value);
+    put_line(line);
+}
+
+static void settle(DWORD milliseconds)
+{
+    DWORD start = GetTickCount();
+    MSG msg;
+
+    /* Let Program Manager and the shell finish painting. */
+    while (GetTickCount() - start < milliseconds) {
+        while (PeekMessage(&msg, (HWND)0, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+        Yield();
+    }
+}
+
+static void report_display(HDC screen)
+{
+    char driver[80];
+
+    put_int("GETWINFLAGS", (long)GetWinFlags());
+    put_int("WF_ENHANCED", (GetWinFlags() & WF_ENHANCED) ? 1L : 0L);
+    put_int("HORZRES", (long)GetDeviceCaps(screen, HORZRES));
+    put_int("VERTRES", (long)GetDeviceCaps(screen, VERTRES));
+    put_int("BITSPIXEL", (long)GetDeviceCaps(screen, BITSPIXEL));
+    put_int("PLANES", (long)GetDeviceCaps(screen, PLANES));
+    put_int("NUMCOLORS", (long)GetDeviceCaps(screen, NUMCOLORS));
+    put_int("RASTERCAPS", (long)GetDeviceCaps(screen, RASTERCAPS));
+    put_int("SIZEPALETTE", (long)GetDeviceCaps(screen, SIZEPALETTE));
+    put_int("SM_CXSCREEN", (long)GetSystemMetrics(SM_CXSCREEN));
+    put_int("SM_CYSCREEN", (long)GetSystemMetrics(SM_CYSCREEN));
+    GetPrivateProfileString("boot", "display.drv", "", driver,
+                            sizeof(driver), "SYSTEM.INI");
+    put_line("DISPLAY_DRV_BEGIN");
+    put_line(driver);
+    put_line("DISPLAY_DRV_END");
+}
+
+/* Returns 0 on success, otherwise a stage number for the log. */
+static int capture_screen(HDC screen)
+{
+    int width = GetDeviceCaps(screen, HORZRES);
+    int height = GetDeviceCaps(screen, VERTRES);
+    DWORD row_bytes = (((DWORD)width * 3UL) + 3UL) & ~3UL;
+    DWORD band_bytes = row_bytes * BAND_ROWS;
+    BITMAPFILEHEADER file_header;
+    BITMAPINFO info;
+    HGLOBAL band_memory;
+    char FAR *band;
+    HDC memory_dc;
+    HBITMAP band_bitmap;
+    HBITMAP old_bitmap;
+    HFILE image;
+    int top;
+    int rows;
+    int stage = 0;
+
+    if (width <= 0 || height <= 0 || (height % BAND_ROWS) != 0 ||
+        band_bytes > 65520UL || sizeof(file_header) != 14) {
+        return 1;
+    }
+
+    band_memory = GlobalAlloc(GMEM_MOVEABLE, band_bytes);
+    if (band_memory == (HGLOBAL)0) {
+        return 2;
+    }
+    band = (char FAR *)GlobalLock(band_memory);
+    memory_dc = CreateCompatibleDC(screen);
+    band_bitmap = CreateCompatibleBitmap(screen, width, BAND_ROWS);
+    image = _lcreat(SCREEN_PATH, 0);
+    if (band == (char FAR *)0 || memory_dc == (HDC)0 ||
+        band_bitmap == (HBITMAP)0 || image == HFILE_ERROR) {
+        stage = 3;
+        goto cleanup;
+    }
+
+    _fmemset(&info, 0, sizeof(info));
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = width;
+    info.bmiHeader.biHeight = BAND_ROWS;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 24;
+    info.bmiHeader.biCompression = BI_RGB;
+
+    file_header.bfType = 0x4D42; /* "BM" */
+    file_header.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+    file_header.bfSize = file_header.bfOffBits + row_bytes * (DWORD)height;
+    file_header.bfReserved1 = 0;
+    file_header.bfReserved2 = 0;
+    _lwrite(image, (LPCSTR)&file_header, sizeof(file_header));
+    info.bmiHeader.biHeight = height;
+    _lwrite(image, (LPCSTR)&info.bmiHeader, sizeof(BITMAPINFOHEADER));
+    info.bmiHeader.biHeight = BAND_ROWS;
+
+    /* BMP rows are bottom-up: walk bands from the bottom of the screen. */
+    for (top = height - BAND_ROWS; top >= 0; top -= BAND_ROWS) {
+        old_bitmap = (HBITMAP)SelectObject(memory_dc, band_bitmap);
+        if (!BitBlt(memory_dc, 0, 0, width, BAND_ROWS, screen, 0, top, SRCCOPY)) {
+            SelectObject(memory_dc, old_bitmap);
+            stage = 4;
+            break;
+        }
+        /* GetDIBits requires the bitmap not to be selected into a DC. */
+        SelectObject(memory_dc, old_bitmap);
+        rows = GetDIBits(screen, band_bitmap, 0, BAND_ROWS, band,
+                         &info, DIB_RGB_COLORS);
+        if (rows != BAND_ROWS) {
+            put_int("GETDIBITS_ROWS", (long)rows);
+            stage = 5;
+            break;
+        }
+        if (_lwrite(image, band, (UINT)band_bytes) != (UINT)band_bytes) {
+            stage = 6;
+            break;
+        }
+    }
+
+cleanup:
+    if (image != HFILE_ERROR) {
+        _lclose(image);
+    }
+    if (band_bitmap != (HBITMAP)0) {
+        DeleteObject(band_bitmap);
+    }
+    if (memory_dc != (HDC)0) {
+        DeleteDC(memory_dc);
+    }
+    if (band != (char FAR *)0) {
+        GlobalUnlock(band_memory);
+    }
+    GlobalFree(band_memory);
+    return stage;
+}
+
+int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous,
+                   LPSTR command_line, int show_command)
+{
+    HDC screen;
+
+    (void)instance;
+    (void)previous;
+    (void)command_line;
+    (void)show_command;
+
+    result_file = _lcreat(RESULT_PATH, 0);
+    if (result_file == HFILE_ERROR) {
+        return 2;
+    }
+    put_line("DISPLAY_BASELINE_PROBE=1");
+    settle(SETTLE_MS);
+
+    screen = GetDC((HWND)0);
+    if (screen == (HDC)0) {
+        put_line("GETDC=FAIL");
+    } else {
+        report_display(screen);
+        put_int("CAPTURE_STAGE", (long)capture_screen(screen));
+        ReleaseDC((HWND)0, screen);
+    }
+    put_line("SHUTDOWN_REQUESTED=YES");
+    _lclose(result_file);
+    result_file = HFILE_ERROR;
+
+    /* End the isolated Windows session so DOSBox-X reaches its exit. */
+    ExitWindows(0, 0);
+    return 0;
+}
