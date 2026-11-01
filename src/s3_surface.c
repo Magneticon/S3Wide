@@ -23,6 +23,30 @@ static int s3_map(S3_SURFACE S3_FAR *surface, S3_U32 bank)
     return 1;
 }
 
+S3_U8 S3_FAR *S3_SurfaceSpan(S3_SURFACE S3_FAR *surface, S3_I16 x, S3_I16 y,
+                             S3_U16 S3_FAR *contiguous)
+{
+    S3_U32 offset, bank, in_bank, left_in_bank;
+    if (surface == (S3_SURFACE S3_FAR *)0 ||
+        contiguous == (S3_U16 S3_FAR *)0 || surface->bank_bytes == 0 ||
+        x < 0 || y < 0 ||
+        (S3_U16)x >= surface->width || (S3_U16)y >= surface->height) {
+        return (S3_U8 S3_FAR *)0;
+    }
+    offset = (S3_U32)(S3_U16)y * (S3_U32)surface->pitch + (S3_U16)x;
+    if (offset >= surface->framebuffer_bytes) {
+        return (S3_U8 S3_FAR *)0;
+    }
+    bank = offset / surface->bank_bytes;
+    in_bank = offset % surface->bank_bytes;
+    if (in_bank >= surface->aperture_bytes || !s3_map(surface, bank)) {
+        return (S3_U8 S3_FAR *)0;
+    }
+    left_in_bank = surface->bank_bytes - in_bank;
+    *contiguous = left_in_bank > 0xFFFFUL ? 0xFFFFU : (S3_U16)left_in_bank;
+    return surface->window + (S3_U16)in_bank;
+}
+
 int S3_FarSpanFitsSingleSegment(S3_U16 pointer_offset, S3_U32 bytes)
 {
     return bytes <= 65536UL - (S3_U32)pointer_offset;

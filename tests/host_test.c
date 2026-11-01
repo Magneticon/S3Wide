@@ -8,6 +8,7 @@
 #include "s3_surface.h"
 #include "s3_device.h"
 #include "s3_brush.h"
+#include "s3_raster.h"
 
 static int failures;
 
@@ -491,8 +492,6 @@ static void test_gdi_bitmap_and_pixel_path(void)
                   (S3_I32)S3_ROP3_SRCCOPY, (void *)0, (void *)0));
     bitmap.bmSegmentIndex = 0;
 
-    CHECK(!BitBlt(&pdev, 0, 0, &bitmap, 0, 0, 4, 3,
-                  (S3_I32)0x00EE0086L, (void *)0, (void *)0));
     bitmap.bmBitsPixel = 4;
     CHECK(!BitBlt(&pdev, 0, 0, &bitmap, 0, 0, 4, 3,
                   (S3_I32)S3_ROP3_SRCCOPY, (void *)0, (void *)0));
@@ -1858,6 +1857,99 @@ static void test_realized_brushes(void)
     CHECK(!S3_RealizePatternBrush(&bitmap, &physical));
 }
 
+static void test_raster_rop3_and_targets(void)
+{
+    BANK_TEST_CONTEXT context;
+    S3_SURFACE surface;
+    S3_PDEV pdev;
+    S3_U8 initial_window[64];
+    S3_BITMAP16 mono, color;
+    S3_U8 mono_bits[2 * 4];
+    S3_U8 color_bits[8 * 4];
+    S3_LBRUSH16 logical;
+    S3_PBRUSH16 brush;
+    S3_DRAWMODE16 mode;
+    unsigned int i;
+
+    /* Truth-table identities of the ROP3 evaluator. */
+    for (i = 0; i < 256; ++i) {
+        CHECK(S3_Rop3(0xF0, (S3_U8)i, 0x5A, 0x33) == (S3_U8)i);  /* PATCOPY */
+        CHECK(S3_Rop3(0xCC, 0x5A, (S3_U8)i, 0x33) == (S3_U8)i);  /* SRCCOPY */
+        CHECK(S3_Rop3(0x55, 0x5A, 0x33, (S3_U8)i) == (S3_U8)~i); /* DSTINVERT */
+        CHECK(S3_Rop3(0x66, 0x00, 0x3C, (S3_U8)i) == (S3_U8)(i ^ 0x3C)); /* SRCINVERT */
+        CHECK(S3_Rop3(0xEE, 0x00, 0x0F, (S3_U8)i) == (S3_U8)(i | 0x0F)); /* SRCPAINT */
+        CHECK(S3_Rop3(0x5A, 0x0F, 0x00, (S3_U8)i) == (S3_U8)(i ^ 0x0F)); /* PATINVERT */
+    }
+
+    memset(&context, 0, sizeof(context));
+    memset(context.vram, 0x11, sizeof(context.vram));
+    memset(initial_window, 0, sizeof(initial_window));
+    context.fail_bank = 0xFFFFFFFFUL;
+    /* 6x5 screen with pitch 8 in the test's 64-byte bank model. */
+    CHECK(S3_SurfaceInit(&surface, 6, 5, 8, 40, 64, 64,
+                         initial_window, &context, test_map_bank));
+    CHECK(S3_InitializePDEV(&pdev));
+    pdev.surface_state = &surface;
+
+    memset(&logical, 0, sizeof(logical));
+    logical.lbStyle = S3_BS_SOLID;
+    logical.lbColor = 0x00FFFFFFUL;
+    CHECK(S3_RealizeBrush(&logical, &brush));
+    /* Solid PATCOPY, clipped to the 6x5 screen. */
+    CHECK(BitBlt(&pdev, 4, 3, (void *)0, 0, 0, 5, 5, 0x00F00021L, &brush, (void *)0));
+    CHECK(context.vram[3 * 8 + 4] == 0xFF && context.vram[4 * 8 + 5] == 0xFF);
+    CHECK(context.vram[3 * 8 + 6] == 0x11 && context.vram[2 * 8 + 4] == 0x11);
+    /* DSTINVERT through the per-pixel path. */
+    CHECK(BitBlt(&pdev, 0, 0, (void *)0, 0, 0, 2, 1, 0x00550009L, (void *)0, (void *)0));
+    CHECK(context.vram[0] == 0xEE && context.vram[1] == 0xEE && context.vram[2] == 0x11);
+
+    /* Mono source to colour screen: 1 = background, 0 = text colour. */
+    memset(&mono, 0, sizeof(mono));
+    memset(mono_bits, 0, sizeof(mono_bits));
+    mono_bits[0] = 0xA0; /* row 0: 1 0 1 0 */
+    mono.bmWidth = 4;
+    mono.bmHeight = 4;
+    mono.bmWidthBytes = 2;
+    mono.bmPlanes = 1;
+    mono.bmBitsPixel = 1;
+    mono.bmBits = mono_bits;
+    memset(&mode, 0, sizeof(mode));
+    mode.bkColor = 0xFF0000E0UL;
+    mode.TextColor = 0xFF000003UL;
+    CHECK(BitBlt(&pdev, 0, 1, &mono, 0, 0, 4, 1, (S3_I32)S3_ROP3_SRCCOPY,
+                 (void *)0, &mode));
+    CHECK(context.vram[1 * 8 + 0] == 0xE0 && context.vram[1 * 8 + 1] == 0x03);
+    CHECK(context.vram[1 * 8 + 2] == 0xE0 && context.vram[1 * 8 + 3] == 0x03);
+
+    /* Colour screen to mono bitmap: background colour becomes 1. */
+    memset(mono_bits, 0x00, sizeof(mono_bits));
+    CHECK(BitBlt(&mono, 0, 0, &pdev, 0, 1, 4, 1, (S3_I32)S3_ROP3_SRCCOPY,
+                 (void *)0, &mode));
+    CHECK(mono_bits[0] == 0xA0);
+    /* Solid white brush on mono: PATCOPY sets bits. */
+    CHECK(BitBlt(&mono, 0, 2, (void *)0, 0, 0, 4, 1, 0x00F00021L, &brush, (void *)0));
+    CHECK((mono_bits[4] & 0xF0) == 0xF0);
+
+    /* 8-bpp bitmap SRCPAINT onto the screen. */
+    memset(&color, 0, sizeof(color));
+    for (i = 0; i < sizeof(color_bits); ++i) color_bits[i] = 0x0F;
+    color.bmWidth = 8;
+    color.bmHeight = 4;
+    color.bmWidthBytes = 8;
+    color.bmPlanes = 1;
+    color.bmBitsPixel = 8;
+    color.bmBits = color_bits;
+    CHECK(BitBlt(&pdev, 0, 4, &color, 0, 0, 2, 1, 0x00EE0086L, (void *)0, (void *)0));
+    CHECK(context.vram[4 * 8 + 0] == 0x1F && context.vram[4 * 8 + 2] == 0x11);
+
+    /* Overlapping screen copy downwards keeps the source rows intact. */
+    context.vram[0 * 8 + 5] = 0x77;
+    context.vram[1 * 8 + 5] = 0x88;
+    CHECK(BitBlt(&pdev, 5, 1, &pdev, 5, 0, 1, 2, (S3_I32)S3_ROP3_SRCCOPY,
+                 (void *)0, (void *)0));
+    CHECK(context.vram[1 * 8 + 5] == 0x77 && context.vram[2 * 8 + 5] == 0x88);
+}
+
 int main(void)
 {
     test_full_vga_bridge_snapshot();
@@ -1866,6 +1958,7 @@ int main(void)
     test_gdi_entrypoint_declines();
     test_realized_pen_and_output_polyline();
     test_realized_brushes();
+    test_raster_rop3_and_targets();
     test_gdi_bitmap_and_pixel_path();
     test_setdibits_to_device_adapter();
     test_banded_dib_upload_reference();

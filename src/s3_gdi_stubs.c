@@ -1,6 +1,7 @@
 #include "s3_surface.h"
 #include "s3_trace.h"
 #include "s3_brush.h"
+#include "s3_raster.h"
 #if !defined(S3_HOST_TEST)
 #include <i86.h>
 #endif
@@ -33,59 +34,15 @@ S3_I16 S3_FAR S3_PASCAL BitBlt(void S3_FAR *destination,
                                S3_I32 rop3, void S3_FAR *physical_brush,
                                void S3_FAR *draw_mode)
 {
-    S3_SURFACE S3_FAR *destination_surface;
-    S3_BITMAP16 S3_FAR *source_bitmap;
-    S3_DIB8_VIEW dib;
-    S3_U32 data_bytes;
-    S3_TRACE_EVENT("BitBlt", 0, 0);
-    (void)physical_brush;
-    (void)draw_mode;
-
-    destination_surface = s3_device_surface(destination);
-    source_bitmap = (S3_BITMAP16 S3_FAR *)source;
-    if (destination_surface == (S3_SURFACE S3_FAR *)0 || source_bitmap ==
-        (S3_BITMAP16 S3_FAR *)0 || rop3 != (S3_I32)S3_ROP3_SRCCOPY ||
-        source_bitmap->bmType != 0 || source_bitmap->bmWidth <= 0 ||
-        source_bitmap->bmHeight <= 0 || source_bitmap->bmWidthBytes < source_bitmap->bmWidth ||
-        (source_bitmap->bmWidthBytes & 1) != 0 || source_bitmap->bmPlanes != 1 ||
-        source_bitmap->bmBitsPixel != 8 || source_bitmap->bmBits == (S3_U8 S3_FAR *)0 ||
-        destination_x > 32767U || destination_y > 32767U ||
-        source_x > 32767U || source_y > 32767U) {
-        return 0;
-    }
-    data_bytes = (S3_U32)(S3_U16)source_bitmap->bmWidthBytes *
-                 (S3_U32)(S3_U16)source_bitmap->bmHeight;
-    if (source_bitmap->bmWidthPlanes != data_bytes ||
-        source_bitmap->bmSegmentIndex != 0 ||
-        source_bitmap->bmScanSegment != 0 || source_bitmap->bmFillBytes != 0) {
-        return 0;
-    }
-    /* BITMAP.bmBits is a far pointer, not a huge pointer. Never walk it across
-       a 64-KiB selector/segment boundary. Larger DIBs need a banded DDI path. */
-    if (data_bytes > 65536UL) {
-        return 0;
-    }
-#if !defined(S3_HOST_TEST)
-    if (!S3_FarSpanFitsSingleSegment((S3_U16)FP_OFF(source_bitmap->bmBits),
-                                    data_bytes)) {
-        return 0;
-    }
-#else
-    if (!S3_FarSpanFitsSingleSegment(0, data_bytes)) {
-        return 0;
-    }
-#endif
-    dib.width = (S3_U16)source_bitmap->bmWidth;
-    dib.height = (S3_U16)source_bitmap->bmHeight;
-    dib.stride = (S3_U16)source_bitmap->bmWidthBytes;
-    dib.data_bytes = data_bytes;
-    dib.bits = source_bitmap->bmBits;
-    dib.top_down = 1; /* Windows DDB/PBITMAP rows are top-down. */
-    return (S3_I16)S3_SurfaceBlitDIB8(destination_surface,
-                                     (S3_I16)destination_x,
-                                     (S3_I16)destination_y,
-                                     &dib, (S3_I16)source_x, (S3_I16)source_y,
-                                     width, height, (S3_U32)rop3);
+    int ok;
+    ok = S3_RasterBitBlt(destination, (S3_I16)destination_x, (S3_I16)destination_y,
+                         source, (S3_I16)source_x, (S3_I16)source_y,
+                         (S3_I16)width, (S3_I16)height, (S3_U32)rop3,
+                         (const S3_PBRUSH16 S3_FAR *)physical_brush,
+                         (const S3_DRAWMODE16 S3_FAR *)draw_mode);
+    S3_TRACE_EVENT(ok ? "BitBlt" : "BitBlt.fail", (S3_U16)((S3_U32)rop3 >> 16),
+                   ((S3_PDEV S3_FAR *)destination)->pdType);
+    return (S3_I16)(ok ? 1 : 0);
 }
 
 S3_U16 S3_FAR S3_PASCAL Output(void S3_FAR *destination,

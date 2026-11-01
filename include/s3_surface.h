@@ -40,6 +40,10 @@ int S3_SurfacePutPixel(S3_SURFACE S3_FAR *surface,
 int S3_SurfaceGetPixel(S3_SURFACE S3_FAR *surface,
                        S3_I16 x, S3_I16 y, S3_U8 S3_FAR *color);
 int S3_FarSpanFitsSingleSegment(S3_U16 pointer_offset, S3_U32 bytes);
+/* Map the bank holding (x, y) and return a pointer to that pixel; *contiguous
+   receives the bytes available before the bank ends. NULL if out of range. */
+S3_U8 S3_FAR *S3_SurfaceSpan(S3_SURFACE S3_FAR *surface, S3_I16 x, S3_I16 y,
+                             S3_U16 S3_FAR *contiguous);
 /* Supports only equal-format 8-bpp SRCCOPY from an unpacked DIB view. */
 int S3_SurfaceBlitDIB8(S3_SURFACE S3_FAR *destination,
                        S3_I16 destination_x, S3_I16 destination_y,
