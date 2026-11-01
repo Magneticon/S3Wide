@@ -221,38 +221,15 @@ static int s3_line_axis_range(const S3_LINE_COORDS *line,
     return *first < *after;
 }
 
-int S3_SurfaceDrawLineClipped(S3_SURFACE S3_FAR *surface,
-                              S3_I16 x0, S3_I16 y0,
-                              S3_I16 x1, S3_I16 y1,
-                              const S3_RECT16 S3_FAR *clip_rect,
-                              S3_U8 color)
+int S3_LineVisit(S3_I16 x0, S3_I16 y0, S3_I16 x1, S3_I16 y1,
+                 S3_I32 left, S3_I32 top, S3_I32 right, S3_I32 bottom,
+                 S3_LINE_PLOT plot, void S3_FAR *context)
 {
     S3_LINE_COORDS line;
-    S3_I32 dx, dy, left, top, right, bottom;
+    S3_I32 dx, dy;
     S3_U32 x_first, x_after, y_first, y_after, k;
-    if (surface == (S3_SURFACE S3_FAR *)0 || surface->width == 0 ||
-        surface->height == 0 || surface->pitch < surface->width ||
-        surface->window == (S3_U8 S3_FAR *)0 || surface->map_bank == 0 ||
-        surface->bank_bytes == 0 || surface->aperture_bytes < surface->bank_bytes) {
-        return 0;
-    }
 
-    left = 0;
-    top = 0;
-    right = surface->width;
-    bottom = surface->height;
-    if (clip_rect != (const S3_RECT16 S3_FAR *)0) {
-        if (clip_rect->right <= clip_rect->left ||
-            clip_rect->bottom <= clip_rect->top) {
-            return 1;
-        }
-        if (clip_rect->left > left) left = clip_rect->left;
-        if (clip_rect->top > top) top = clip_rect->top;
-        if (clip_rect->right < right) right = clip_rect->right;
-        if (clip_rect->bottom < bottom) bottom = clip_rect->bottom;
-    }
     if (left >= right || top >= bottom) return 1;
-
     line.x0 = x0;
     line.y0 = y0;
     dx = x1 >= x0 ? (S3_I32)x1 - x0 : (S3_I32)x0 - x1;
@@ -275,11 +252,57 @@ int S3_SurfaceDrawLineClipped(S3_SURFACE S3_FAR *surface,
     for (k = x_first; k < x_after; ++k) {
         S3_I32 x = s3_line_coord_at(&line, 1, k);
         S3_I32 y = s3_line_coord_at(&line, 0, k);
-        if (!S3_SurfacePutPixel(surface, (S3_I16)x, (S3_I16)y, color)) {
+        if (!plot(context, (S3_I16)x, (S3_I16)y)) {
             return 0;
         }
     }
     return 1;
+}
+
+typedef struct S3_SURFACE_PLOT {
+    S3_SURFACE S3_FAR *surface;
+    S3_U8 color;
+} S3_SURFACE_PLOT;
+
+static int s3_surface_plot(void S3_FAR *context, S3_I16 x, S3_I16 y)
+{
+    S3_SURFACE_PLOT S3_FAR *plot = (S3_SURFACE_PLOT S3_FAR *)context;
+    return S3_SurfacePutPixel(plot->surface, x, y, plot->color);
+}
+
+int S3_SurfaceDrawLineClipped(S3_SURFACE S3_FAR *surface,
+                              S3_I16 x0, S3_I16 y0,
+                              S3_I16 x1, S3_I16 y1,
+                              const S3_RECT16 S3_FAR *clip_rect,
+                              S3_U8 color)
+{
+    S3_SURFACE_PLOT plot;
+    S3_I32 left, top, right, bottom;
+    if (surface == (S3_SURFACE S3_FAR *)0 || surface->width == 0 ||
+        surface->height == 0 || surface->pitch < surface->width ||
+        surface->window == (S3_U8 S3_FAR *)0 || surface->map_bank == 0 ||
+        surface->bank_bytes == 0 || surface->aperture_bytes < surface->bank_bytes) {
+        return 0;
+    }
+
+    left = 0;
+    top = 0;
+    right = surface->width;
+    bottom = surface->height;
+    if (clip_rect != (const S3_RECT16 S3_FAR *)0) {
+        if (clip_rect->right <= clip_rect->left ||
+            clip_rect->bottom <= clip_rect->top) {
+            return 1;
+        }
+        if (clip_rect->left > left) left = clip_rect->left;
+        if (clip_rect->top > top) top = clip_rect->top;
+        if (clip_rect->right < right) right = clip_rect->right;
+        if (clip_rect->bottom < bottom) bottom = clip_rect->bottom;
+    }
+    plot.surface = surface;
+    plot.color = color;
+    return S3_LineVisit(x0, y0, x1, y1, left, top, right, bottom,
+                        s3_surface_plot, &plot);
 }
 
 int S3_SurfaceGetPixel(S3_SURFACE S3_FAR *surface,

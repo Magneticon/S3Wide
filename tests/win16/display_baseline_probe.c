@@ -180,6 +180,20 @@ static DWORD hold_seconds(LPCSTR command_line)
     return seconds;
 }
 
+/* "demo" anywhere in the command line opens applications before capture. */
+static int wants_demo(LPCSTR command_line)
+{
+    for (; *command_line != '\0'; ++command_line) {
+        if ((command_line[0] == 'd' || command_line[0] == 'D') &&
+            (command_line[1] == 'e' || command_line[1] == 'E') &&
+            (command_line[2] == 'm' || command_line[2] == 'M') &&
+            (command_line[3] == 'o' || command_line[3] == 'O')) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous,
                    LPSTR command_line, int show_command)
 {
@@ -197,6 +211,14 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous,
     }
     put_line("DISPLAY_BASELINE_PROBE=1");
     settle(SETTLE_MS);
+    if (wants_demo(command_line)) {
+        /* Put ordinary UI on screen: windows, menus, buttons, edit text. */
+        HWND progman = FindWindow("Progman", NULL);
+        if (progman != (HWND)0) ShowWindow(progman, SW_SHOWNORMAL);
+        put_int("DEMO_CALC", (long)WinExec("CALC.EXE", SW_SHOWNORMAL));
+        put_int("DEMO_NOTEPAD", (long)WinExec("NOTEPAD.EXE", SW_SHOWNORMAL));
+        settle(SETTLE_MS);
+    }
 
     screen = GetDC((HWND)0);
     if (screen == (HDC)0) {

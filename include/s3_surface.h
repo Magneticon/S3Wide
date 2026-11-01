@@ -70,6 +70,13 @@ int S3_SurfaceDrawLine(S3_SURFACE S3_FAR *surface,
 /* Draw one DDA polyline segment with Bresenham rounding, a half-open endpoint,
    and clipping to clip_rect intersected with the surface. Failed bank maps may
    leave a prefix of pixels written; callers must not assume atomic drawing. */
+/* Visit the pixels of a DDA line segment (first point included, last point
+   excluded) inside [left, right) x [top, bottom). plot returns nonzero to
+   continue. */
+typedef int (*S3_LINE_PLOT)(void S3_FAR *context, S3_I16 x, S3_I16 y);
+int S3_LineVisit(S3_I16 x0, S3_I16 y0, S3_I16 x1, S3_I16 y1,
+                 S3_I32 left, S3_I32 top, S3_I32 right, S3_I32 bottom,
+                 S3_LINE_PLOT plot, void S3_FAR *context);
 int S3_SurfaceDrawLineClipped(S3_SURFACE S3_FAR *surface,
                               S3_I16 x0, S3_I16 y0,
                               S3_I16 x1, S3_I16 y1,

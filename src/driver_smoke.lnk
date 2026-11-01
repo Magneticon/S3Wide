@@ -18,6 +18,8 @@ file build/s3_win16_hw.obj
 file build/s3_brush.obj
 file build/s3_raster.obj
 file build/s3_dib.obj
+file build/s3_text.obj
+file build/s3_output.obj
 file build/libentry.obj
 name build/s3wide_driver.dll
 # GDI binds the display driver as module DISPLAY; the description follows
@@ -42,6 +44,7 @@ export DeviceMode.13=DEVICEMODE
 export ExtTextOut.14=EXTTEXTOUT
 export GetCharWidth.15=GETCHARWIDTH
 export DeviceBitmap.16=DEVICEBITMAP
+export FastBorder.17=FASTBORDER
 export DeviceBitmapBits.19=DEVICEBITMAPBITS
 export SetDIBitsToDevice.21=SETDIBITSTODEVICE
 export Inquire.101=INQUIRE

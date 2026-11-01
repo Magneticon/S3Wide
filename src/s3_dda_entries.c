@@ -1,6 +1,8 @@
 #include "s3_abi.h"
 #include "s3_trace.h"
 #include "s3_dib.h"
+#include "s3_text.h"
+#include "s3_raster.h"
 
 /* Remaining DDA entry points of the WfW 3.11 stock display-driver export
    table. Signatures follow the Windows 98 DDK reference for the same
@@ -57,18 +59,26 @@ S3_U32 S3_FAR S3_PASCAL ExtTextOut(void S3_FAR *device, S3_I16 x, S3_I16 y,
                                    S3_I16 S3_FAR *char_widths,
                                    void S3_FAR *opaque_rect, S3_U16 options)
 {
-    (void)device;
-    (void)x;
-    (void)y;
-    (void)clip_rect;
-    (void)text;
-    (void)font_info;
-    (void)draw_mode;
+    S3_U32 result;
     (void)text_xform;
-    (void)char_widths;
-    (void)opaque_rect;
-    S3_TRACE_EVENT("ExtTextOut", count, options);
-    return 0;
+    S3_TRACE_EVENT("ExtTextOut.enter", count, options);
+#if defined(S3_TRACE)
+    {
+        /* Log the characters (two per field) so fault dialogs are readable. */
+        S3_I16 i, n = (S3_I16)(count < 0 ? -count : count);
+        for (i = 0; i + 3 < n && i < 64; i = (S3_I16)(i + 4)) {
+            S3_TRACE_EVENT("ExtTextOut.text",
+                           ((S3_U16)(S3_U8)text[i] << 8) | (S3_U8)text[i + 1],
+                           ((S3_U16)(S3_U8)text[i + 2] << 8) | (S3_U8)text[i + 3]);
+        }
+    }
+#endif
+    result = S3_TextOut(device, x, y, (const S3_RECT16 S3_FAR *)clip_rect,
+                        (const S3_U8 S3_FAR *)text, count, font_info,
+                        (S3_DRAWMODE16 S3_FAR *)draw_mode, char_widths,
+                        (const S3_RECT16 S3_FAR *)opaque_rect, options);
+    if (result == 0) S3_TRACE_EVENT("ExtTextOut.fail", count, options);
+    return result;
 }
 
 S3_U32 S3_FAR S3_PASCAL StrBlt(void S3_FAR *device, S3_I16 x, S3_I16 y,
@@ -111,13 +121,64 @@ S3_U16 S3_FAR S3_PASCAL GetCharWidth(void S3_FAR *device,
                                      void S3_FAR *draw_mode,
                                      void S3_FAR *font_xform)
 {
+    int ok;
     (void)device;
-    (void)buffer;
-    (void)font_info;
     (void)draw_mode;
     (void)font_xform;
-    S3_TRACE_EVENT("GetCharWidth", first_char, last_char);
-    return 0;
+    ok = S3_TextCharWidths(font_info, first_char, last_char, buffer);
+    if (!ok) S3_TRACE_EVENT("GetCharWidth.fail", first_char, last_char);
+    return (S3_U16)ok;
+}
+
+/* Clip one border strip and fill it with the brush and ROP3. */
+static int s3_border_strip(void S3_FAR *device, S3_I16 left, S3_I16 top,
+                           S3_I16 right, S3_I16 bottom, S3_U32 rop,
+                           const S3_PBRUSH16 S3_FAR *brush,
+                           const S3_DRAWMODE16 S3_FAR *mode,
+                           const S3_RECT16 S3_FAR *clip)
+{
+    if (clip != (const S3_RECT16 S3_FAR *)0) {
+        if (clip->left > left) left = clip->left;
+        if (clip->top > top) top = clip->top;
+        if (clip->right < right) right = clip->right;
+        if (clip->bottom < bottom) bottom = clip->bottom;
+    }
+    if (left >= right || top >= bottom) return 1;
+    return S3_RasterBitBlt(device, left, top, (void S3_FAR *)0, 0, 0,
+                           (S3_I16)(right - left), (S3_I16)(bottom - top),
+                           rop, brush, mode);
+}
+
+/* FastBorder (ordinal 17): GDI's FastWindowFrame calls it through the
+   driver table whenever dpRaster has RC_GDI20_OUTPUT, with this exact
+   Pascal argument order (28 bytes). Draws the frame of hBorder-wide
+   vertical and vBorder-high horizontal strips inside rect. */
+S3_U16 S3_FAR S3_PASCAL FastBorder(S3_RECT16 S3_FAR *rect, S3_U16 h_border,
+                                   S3_U16 v_border, S3_U32 rop,
+                                   void S3_FAR *device, void S3_FAR *brush,
+                                   void S3_FAR *draw_mode,
+                                   S3_RECT16 S3_FAR *clip)
+{
+    const S3_PBRUSH16 S3_FAR *pbrush = (const S3_PBRUSH16 S3_FAR *)brush;
+    const S3_DRAWMODE16 S3_FAR *mode = (const S3_DRAWMODE16 S3_FAR *)draw_mode;
+    S3_I16 l, t, r, b, hw, vw;
+    int ok;
+
+    if (rect == (S3_RECT16 S3_FAR *)0) return 0;
+    l = rect->left;
+    t = rect->top;
+    r = rect->right;
+    b = rect->bottom;
+    hw = (S3_I16)h_border;
+    vw = (S3_I16)v_border;
+    S3_TRACE_EVENT("FastBorder", (S3_U16)hw, (S3_U16)vw);
+    ok = s3_border_strip(device, l, t, r, (S3_I16)(t + vw), rop, pbrush, mode, clip) &&
+         s3_border_strip(device, l, (S3_I16)(b - vw), r, b, rop, pbrush, mode, clip) &&
+         s3_border_strip(device, l, (S3_I16)(t + vw), (S3_I16)(l + hw),
+                         (S3_I16)(b - vw), rop, pbrush, mode, clip) &&
+         s3_border_strip(device, (S3_I16)(r - hw), (S3_I16)(t + vw), r,
+                         (S3_I16)(b - vw), rop, pbrush, mode, clip);
+    return (S3_U16)(ok ? 1 : 0);
 }
 
 S3_U16 S3_FAR S3_PASCAL DeviceBitmap(void S3_FAR *device, S3_U16 command,
@@ -139,6 +200,7 @@ S3_U16 S3_FAR S3_PASCAL DeviceBitmapBits(void S3_FAR *bitmap, S3_U16 get,
 {
     S3_U16 copied;
     (void)draw_mode;
+    S3_TRACE_EVENT("DeviceBitmapBits.enter", get, scans);
     (void)translate; /* only supplied for palette devices */
     copied = S3_DibBitmapBits(bitmap, get, start, scans, (S3_U8 S3_FAR *)dib_bits,
                               (S3_BITMAPINFO16 S3_FAR *)bitmap_info);

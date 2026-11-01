@@ -1,0 +1,2 @@
+size=1280x720 differing_pixels=30
+bbox=(16,44)-(17,58)

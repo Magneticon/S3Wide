@@ -10,6 +10,8 @@
 #include "s3_brush.h"
 #include "s3_raster.h"
 #include "s3_dib.h"
+#include "s3_text.h"
+#include "s3_output.h"
 
 static int failures;
 
@@ -772,7 +774,7 @@ static void test_realized_pen_and_output_polyline(void)
 {
     S3_PDEV pdev;
     S3_SURFACE surface;
-    S3_RECT16 clip;
+    S3_RECT16 clip, clip_saved;
     S3_DRAWMODE16 mode;
     S3_LPEN16 logical_pen;
     S3_PPEN16 physical_pen;
@@ -809,24 +811,34 @@ static void test_realized_pen_and_output_polyline(void)
     clip.left = 1; clip.top = 2; clip.right = 5; clip.bottom = 5;
     CHECK(Output(&pdev, S3_OS_POLYLINE, 3, points, &physical_pen,
                  (void *)0, &mode, &clip) == 1);
-    CHECK(context.vram[2 * 12 + 0] == 0xE0);
+    /* Clipped to x 1..4 and y 2..4. */
+    CHECK(context.vram[2 * 12 + 0] == 0xCC);
     CHECK(context.vram[2 * 12 + 1] == 0xE0);
     CHECK(context.vram[2 * 12 + 2] == 0xE0);
     CHECK(context.vram[2 * 12 + 3] == 0xE0);
     CHECK(context.vram[2 * 12 + 4] == 0xE0);
     CHECK(context.vram[3 * 12 + 4] == 0xE0);
     CHECK(context.vram[4 * 12 + 4] == 0xE0);
-    CHECK(context.vram[5 * 12 + 4] == 0xE0);
+    CHECK(context.vram[5 * 12 + 4] == 0xCC);
     CHECK(context.vram[6 * 12 + 4] == 0xCC);
-    /* dpClip is zero; Output must ignore lpClipRect, including its contents. */
+    /* GDIINFO advertises CP_RECTANGLE: Output honours lpClipRect. */
     memset(context.vram, 0xCC, sizeof(context.vram));
+    clip_saved = clip;
+    clip.left = 1;
     CHECK(Output(&pdev, S3_OS_POLYLINE, 3, points, &physical_pen,
-                 (void *)0, &mode, (S3_RECT16 *)1) == 1);
-    CHECK(context.vram[2 * 12 + 0] == 0xE0);
+                 (void *)0, &mode, &clip) == 1);
+    CHECK(context.vram[2 * 12 + 0] == 0xCC);
+    clip = clip_saved;
 
+    /* R2_XORPEN through the generic path: drawing twice restores the pixels. */
+    memset(context.vram, 0xCC, sizeof(context.vram));
     mode.Rop2 = 7;
     CHECK(Output(&pdev, S3_OS_POLYLINE, 3, points, &physical_pen,
-                 (void *)0, &mode, &clip) == S3_DDA_NOT_SUPPORTED);
+                 (void *)0, &mode, &clip) == 1);
+    CHECK(context.vram[2 * 12 + 3] == (S3_U8)(0xCC ^ 0xE0));
+    CHECK(Output(&pdev, S3_OS_POLYLINE, 3, points, &physical_pen,
+                 (void *)0, &mode, &clip) == 1);
+    CHECK(context.vram[2 * 12 + 3] == 0xCC);
     mode.Rop2 = S3_R2_COPYPEN;
     CHECK(Output(&pdev, S3_OS_POLYLINE, 1, points, &physical_pen,
                  (void *)0, &mode, &clip) == 0);
@@ -2034,6 +2046,156 @@ static void test_dib_conversions(void)
     CHECK(S3_DibBitmapBits(&bitmap, 0, 0, 2, dib1, (S3_BITMAPINFO16 *)&info) == 0);
 }
 
+static void test_raster_text(void)
+{
+    /* Version 2.00 font segment: chars 'A'..'B', 4 wide x 3 high, default
+       and break characters biased by the first character. */
+    S3_U8 font[160];
+    S3_U8 bits[8];
+    S3_BITMAP16 bitmap;
+    S3_DRAWMODE16 mode;
+    S3_RECT16 clip;
+    S3_I16 widths[2];
+    S3_U32 extent;
+
+    memset(font, 0, sizeof(font));
+    font[0] = 0x00; font[1] = 0x02;            /* fsVersion 0x0200 */
+    font[86] = 4;                              /* fsPixWidth */
+    font[88] = 3;                              /* fsPixHeight */
+    font[95] = 'A'; font[96] = 'B';            /* first, last */
+    font[97] = 0; font[98] = 1;                /* default 'A', break 'B' */
+    font[118] = 4; font[120] = 130;            /* 'A': width 4, bits at 130 */
+    font[122] = 3; font[124] = 133;            /* 'B': width 3, bits at 133 */
+    font[130] = 0xF0; font[131] = 0x90; font[132] = 0xF0; /* 'A' rows */
+    font[133] = 0x80; font[134] = 0x80; font[135] = 0x80; /* 'B': left bar */
+
+    memset(&mode, 0, sizeof(mode));
+    mode.bkMode = S3_BK_TRANSPARENT;
+    mode.TextColor = 0xFF000000UL; /* black -> mono 0 */
+    mode.bkColor = 0xFF0000FFUL;   /* white */
+    extent = S3_TextOut((void *)0, 0, 0, (S3_RECT16 *)0, (const S3_U8 *)"AB", -2,
+                        font + S3_FONT_INFO_OFFSET, &mode, (S3_I16 *)0,
+                        (S3_RECT16 *)0, 0);
+    CHECK(extent == ((3UL << 16) | 7));
+    mode.CharExtra = 1;
+    extent = S3_TextOut((void *)0, 0, 0, (S3_RECT16 *)0, (const S3_U8 *)"AZ", -2,
+                        font + S3_FONT_INFO_OFFSET, &mode, (S3_I16 *)0,
+                        (S3_RECT16 *)0, 0);
+    CHECK(extent == ((3UL << 16) | 10)); /* 'Z' uses default 'A' */
+    mode.CharExtra = 0;
+    CHECK(S3_TextCharWidths(font + S3_FONT_INFO_OFFSET, 'A', 'B', widths) &&
+          widths[0] == 4 && widths[1] == 3);
+
+    /* Draw "AB" into an 8x3 white monochrome bitmap. */
+    memset(&bitmap, 0, sizeof(bitmap));
+    memset(bits, 0xFF, sizeof(bits));
+    bitmap.bmWidth = 8;
+    bitmap.bmHeight = 3;
+    bitmap.bmWidthBytes = 2;
+    bitmap.bmPlanes = 1;
+    bitmap.bmBitsPixel = 1;
+    bitmap.bmBits = bits;
+    clip.left = 0; clip.top = 0; clip.right = 8; clip.bottom = 3;
+    extent = S3_TextOut(&bitmap, 0, 0, &clip, (const S3_U8 *)"AB", 2,
+                        font + S3_FONT_INFO_OFFSET, &mode, (S3_I16 *)0,
+                        (S3_RECT16 *)0, 0);
+    CHECK(extent == ((3UL << 16) | 7));
+    /* Row 0: A=1111, B=1.. -> black (0) at x 0-3 and 4. */
+    CHECK(bits[0] == 0x07);
+    /* Row 1: A=1001, B bar -> 0 at x0, x3, x4. */
+    CHECK(bits[2] == 0x67);
+
+    /* Explicit widths and clipping. */
+    memset(bits, 0xFF, sizeof(bits));
+    widths[0] = 5; widths[1] = 3;
+    clip.right = 5;
+    CHECK(S3_TextOut(&bitmap, 0, 0, &clip, (const S3_U8 *)"AB", 2,
+                     font + S3_FONT_INFO_OFFSET, &mode, widths,
+                     (S3_RECT16 *)0, 0) == ((3UL << 16) | 8));
+    CHECK(bits[0] == 0x0F); /* 'B' at x 5 is clipped away */
+
+    /* Opaque mode paints the cell background. */
+    memset(bits, 0x00, sizeof(bits));
+    clip.right = 8;
+    mode.bkMode = S3_BK_OPAQUE;
+    CHECK(S3_TextOut(&bitmap, 0, 0, &clip, (const S3_U8 *)"B", 1,
+                     font + S3_FONT_INFO_OFFSET, &mode, (S3_I16 *)0,
+                     (S3_RECT16 *)0, 0) == ((3UL << 16) | 3));
+    CHECK(bits[0] == 0x60);
+
+    font[1] = 0x01; /* unknown version */
+    CHECK(S3_TextOut(&bitmap, 0, 0, &clip, (const S3_U8 *)"B", 1,
+                     font + S3_FONT_INFO_OFFSET, &mode, (S3_I16 *)0,
+                     (S3_RECT16 *)0, 0) == 0);
+}
+
+static void test_output_scanlines(void)
+{
+    S3_BITMAP16 bitmap;
+    S3_U8 bits[16 * 4];
+    S3_POINT16 points[3];
+    S3_PPEN16 pen;
+    S3_LBRUSH16 logical;
+    S3_PBRUSH16 brush;
+    S3_DRAWMODE16 mode;
+    S3_RECT16 clip;
+
+    CHECK(S3_Rop2ToRop3(13) == 0xF0); /* R2_COPYPEN = PATCOPY */
+    CHECK(S3_Rop2ToRop3(6) == 0x55);  /* R2_NOT = DSTINVERT */
+    CHECK(S3_Rop2ToRop3(7) == 0x5A);  /* R2_XORPEN = PATINVERT */
+    CHECK(S3_Rop2ToRop3(1) == 0x00 && S3_Rop2ToRop3(16) == 0xFF);
+
+    memset(&bitmap, 0, sizeof(bitmap));
+    memset(bits, 0x11, sizeof(bits));
+    bitmap.bmWidth = 16;
+    bitmap.bmHeight = 4;
+    bitmap.bmWidthBytes = 16;
+    bitmap.bmPlanes = 1;
+    bitmap.bmBitsPixel = 8;
+    bitmap.bmBits = bits;
+    memset(&mode, 0, sizeof(mode));
+    mode.Rop2 = 13;
+    mode.bkMode = 1;
+    memset(&pen, 0, sizeof(pen));
+    pen.color = 0xFF000042UL;
+    clip.left = 0; clip.top = 0; clip.right = 12; clip.bottom = 4;
+
+    /* Pen-coloured spans [2,5) and [10,20) on row 1, clipped at x = 12. */
+    points[0].x = 0; points[0].y = 1;
+    points[1].x = 2; points[1].y = 5;
+    points[2].x = 10; points[2].y = 20;
+    CHECK(S3_OutputScanlines(&bitmap, 3, points, &pen, (S3_PBRUSH16 *)0, &mode, &clip));
+    CHECK(bits[16 + 1] == 0x11 && bits[16 + 2] == 0x42 && bits[16 + 4] == 0x42);
+    CHECK(bits[16 + 5] == 0x11 && bits[16 + 11] == 0x42 && bits[16 + 12] == 0x11);
+
+    /* Transparent hatch: only the foreground of HS_VERTICAL (x % 8 == 4). */
+    memset(&logical, 0, sizeof(logical));
+    logical.lbStyle = S3_BS_HATCHED;
+    logical.lbHatch = 1;
+    logical.lbColor = 0x000000FFUL;
+    logical.lbBkColor = 0x00FFFFFFUL;
+    CHECK(S3_RealizeBrush(&logical, &brush));
+    points[0].y = 2;
+    points[1].x = 0; points[1].y = 8;
+    CHECK(S3_OutputScanlines(&bitmap, 2, points, &pen, &brush, &mode, &clip));
+    CHECK(bits[32 + 4] == 0xE0 && bits[32 + 3] == 0x11 && bits[32 + 5] == 0x11);
+
+    /* Hollow brush draws nothing; outside the clip rows nothing either. */
+    logical.lbStyle = S3_BS_HOLLOW;
+    CHECK(S3_RealizeBrush(&logical, &brush));
+    CHECK(S3_OutputScanlines(&bitmap, 2, points, &pen, &brush, &mode, &clip));
+    points[0].y = 5;
+    CHECK(S3_OutputScanlines(&bitmap, 2, points, &pen, (S3_PBRUSH16 *)0, &mode, &clip));
+
+    /* Generic polyline on a memory bitmap with R2_NOT. */
+    memset(bits, 0x0F, sizeof(bits));
+    points[0].x = 0; points[0].y = 0;
+    points[1].x = 4; points[1].y = 0;
+    mode.Rop2 = 6;
+    CHECK(S3_OutputPolyline(&bitmap, 2, points, 0x42, 6, &clip));
+    CHECK(bits[0] == 0xF0 && bits[3] == 0xF0 && bits[4] == 0x0F);
+}
+
 int main(void)
 {
     test_full_vga_bridge_snapshot();
@@ -2044,6 +2206,8 @@ int main(void)
     test_realized_brushes();
     test_raster_rop3_and_targets();
     test_dib_conversions();
+    test_raster_text();
+    test_output_scanlines();
     test_gdi_bitmap_and_pixel_path();
     test_setdibits_to_device_adapter();
     test_banded_dib_upload_reference();

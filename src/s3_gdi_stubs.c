@@ -3,6 +3,7 @@
 #include "s3_brush.h"
 #include "s3_raster.h"
 #include "s3_dib.h"
+#include "s3_output.h"
 #if !defined(S3_HOST_TEST)
 #include <i86.h>
 #endif
@@ -59,16 +60,30 @@ S3_U16 S3_FAR S3_PASCAL Output(void S3_FAR *destination,
     S3_DRAWMODE16 S3_FAR *mode;
     S3_U32 point_bytes;
     S3_U16 i;
-    S3_TRACE_EVENT("Output", 0, 0);
-    (void)clip_rect;
+
+    S3_TRACE_EVENT("Output.enter", style, point_count);
+    if (style == S3_OS_SCANLINES) {
+        if (!S3_OutputScanlines(destination, point_count, points,
+                                (const S3_PPEN16 S3_FAR *)physical_pen,
+                                (const S3_PBRUSH16 S3_FAR *)physical_brush,
+                                (const S3_DRAWMODE16 S3_FAR *)draw_mode,
+                                clip_rect)) {
+            S3_TRACE_EVENT("Output.scanlines.fail", point_count, 0);
+            return 0;
+        }
+        return 1;
+    }
+    if (style == S3_OS_BEGINNSCAN || style == S3_OS_ENDNSCAN) {
+        /* Brackets around a batch of OS_SCANLINES calls; nothing to do. */
+        return 1;
+    }
     if (style != S3_OS_POLYLINE) {
         /* The DDA contract asks GDI to simulate unsupported Output styles. */
+        S3_TRACE_EVENT("Output.unsupported", style, 0);
         return S3_DDA_NOT_SUPPORTED;
     }
-    surface = s3_device_surface(destination);
-    if (surface == (S3_SURFACE S3_FAR *)0 || point_count < 2 ||
-        points == (S3_POINT16 S3_FAR *)0 || physical_pen == (void S3_FAR *)0 ||
-        draw_mode == (void S3_FAR *)0) {
+    if (point_count < 2 || points == (S3_POINT16 S3_FAR *)0 ||
+        physical_pen == (void S3_FAR *)0 || draw_mode == (void S3_FAR *)0) {
         return 0;
     }
     point_bytes = (S3_U32)point_count * (S3_U32)sizeof(S3_POINT16);
@@ -84,17 +99,21 @@ S3_U16 S3_FAR S3_PASCAL Output(void S3_FAR *destination,
         return S3_DDA_NOT_SUPPORTED;
     }
     mode = (S3_DRAWMODE16 S3_FAR *)draw_mode;
-    if (mode->Rop2 != S3_R2_COPYPEN) return S3_DDA_NOT_SUPPORTED;
+    surface = s3_device_surface(destination);
+    if (surface == (S3_SURFACE S3_FAR *)0 || mode->Rop2 != S3_R2_COPYPEN) {
+        /* Memory bitmaps and other pen ROPs: generic per-pixel path. */
+        return (S3_U16)(S3_OutputPolyline(destination, point_count, points,
+                                          (S3_U8)pen->color, mode->Rop2,
+                                          clip_rect) ? 1 : 0);
+    }
 
     /* Win16 Output polyline segments draw their first point, but not the last.
-       dpClip is zero in GDIINFO, so this DDA ignores lpClipRect and enforces
-       the framebuffer bounds itself. */
+       GDIINFO advertises CP_RECTANGLE, so lpClipRect is honoured. */
     for (i = 1; i < point_count; ++i) {
         if (!S3_SurfaceDrawLineClipped(surface,
                                        points[i - 1].x, points[i - 1].y,
                                        points[i].x, points[i].y,
-                                       (const S3_RECT16 S3_FAR *)0,
-                                       (S3_U8)pen->color)) {
+                                       clip_rect, (S3_U8)pen->color)) {
             return 0;
         }
     }

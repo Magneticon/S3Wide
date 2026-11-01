@@ -1,4 +1,5 @@
 #include "s3_raster.h"
+#include "s3_trace.h"
 #include <string.h>
 #if !defined(S3_HOST_TEST)
 #include <i86.h>
@@ -230,6 +231,10 @@ int S3_RasterBitBlt(void S3_FAR *destination, S3_I16 dx, S3_I16 dy,
 
     if (!S3_BindTarget(destination, &dst)) return 0;
     if (use_s && !S3_BindTarget(source, &src)) return 0;
+    S3_TRACE_EVENT("blt.enter", rop, (dst.kind << 8) | (use_s ? src.kind : 0));
+    S3_TRACE_EVENT("blt.dst", dst.stride, dst.height);
+    S3_TRACE_EVENT("blt.rect", (S3_U16)dx, (S3_U16)dy);
+    S3_TRACE_EVENT("blt.size", (S3_U16)width, (S3_U16)height);
     if (!s3_clip(&dx, &dy, &sx, &sy, &width, &height, &dst,
                  use_s ? &src : (S3_TARGET S3_FAR *)0)) {
         return 1; /* fully clipped */

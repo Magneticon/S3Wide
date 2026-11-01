@@ -19,6 +19,8 @@
 #   FALLBACK   with VISIBLE=1, capture anyway after this many seconds if the
 #              probe never signals (default 0 = wait for the probe)
 #   WIN_ARGS   extra WIN.COM switches, for example /b for BOOTLOG.TXT
+#   DEMO       1 = DISPBASE.EXE restores Program Manager and opens Calculator
+#              and Notepad before capturing
 # Requires Git Bash or MSYS2 on Windows (uses cygpath).
 set -eu
 
@@ -39,11 +41,15 @@ TIME_LIMIT=${TIME_LIMIT:-150}
 VISIBLE=${VISIBLE:-0}
 FALLBACK=${FALLBACK:-0}
 WIN_ARGS=${WIN_ARGS:-}
+DEMO=${DEMO:-0}
 if [ "$VISIBLE" = 1 ]; then
     HOLD=${HOLD:-6}
     probe_args=" $HOLD"
 else
     probe_args=
+fi
+if [ "$DEMO" = 1 ]; then
+    probe_args="$probe_args demo"
 fi
 
 if [ -e "$run" ]; then
@@ -104,6 +110,10 @@ vmemsize=$VMEMSIZE
 core=normal
 cputype=pentium
 cycles=max
+# Stop on a guest triple fault instead of rebooting into a loop, so the
+# time limit ends the run and the failure stays visible.
+reset on triple fault=false
+always report triple fault=true
 
 [render]
 aspect=false
