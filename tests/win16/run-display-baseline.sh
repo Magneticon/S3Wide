@@ -83,6 +83,9 @@ cat > "$run/baseline.conf" <<EOF
 fullscreen=false
 output=surface
 windowresolution=original
+# Keep the whole client area on screen: off-screen parts of the window are
+# never painted and would capture as black.
+windowposition=0,0
 
 [dosbox]
 title=S3 display baseline

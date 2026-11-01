@@ -9,6 +9,7 @@
 #include "s3_device.h"
 #include "s3_brush.h"
 #include "s3_raster.h"
+#include "s3_dib.h"
 
 static int failures;
 
@@ -275,8 +276,10 @@ static void test_setdibits_to_device_adapter(void)
     CHECK(SetDIBitsToDevice(&pdev, 0, 0, 0, 1, &clip, (S3_DRAWMODE16 *)0,
                             bits, (S3_BITMAPINFO16 *)&info, translate) == 0);
     info.header.biBitCount = 8;
+    /* Without a translate table the RGB colour table is used (non-palette
+       device), through the generic DIB path. */
     CHECK(SetDIBitsToDevice(&pdev, 0, 0, 0, 1, &clip, (S3_DRAWMODE16 *)0,
-                            bits, (S3_BITMAPINFO16 *)&info, (S3_I16 *)0) == 0);
+                            bits, (S3_BITMAPINFO16 *)&info, (S3_I16 *)0) == 1);
     translate[21] = 256;
     CHECK(SetDIBitsToDevice(&pdev, 0, 0, 1, 1, &clip, (S3_DRAWMODE16 *)0,
                             bits, (S3_BITMAPINFO16 *)&info, translate) == 0);
@@ -1161,7 +1164,7 @@ static void test_s3_mode_snapshot_and_candidate_sequence(void)
     CHECK(context.crtc[0x11] == 0x84 && context.crtc[0x12] == 0xCF);
     CHECK(context.crtc[0x0C] == 0x00 && context.crtc[0x0D] == 0x00);
     CHECK(context.crtc[0x13] == 0xA0 && context.crtc[0x15] == 0xD0);
-    CHECK(context.crtc[0x16] == 0xFF && context.crtc[0x17] == 0xA3);
+    CHECK(context.crtc[0x16] == 0xE7 && context.crtc[0x17] == 0xA3);
     CHECK(context.crtc[0x3A] == 0x15);
     CHECK(context.crtc[0x18] == 0xFF);
     CHECK(context.crtc[0x42] == 0x00 && context.crtc[0x43] == 0x00);
@@ -1950,6 +1953,87 @@ static void test_raster_rop3_and_targets(void)
     CHECK(context.vram[1 * 8 + 5] == 0x77 && context.vram[2 * 8 + 5] == 0x88);
 }
 
+static void test_dib_conversions(void)
+{
+    struct {
+        S3_BITMAPINFOHEADER16 header;
+        S3_RGBQUAD16 colors[256];
+    } info;
+    S3_BITMAP16 bitmap;
+    S3_U8 device_bits[4 * 2];
+    S3_U8 mono_bits[2 * 2];
+    S3_U8 dib24[2 * 12];
+    S3_U8 dib1[2 * 4];
+    S3_U8 dib8[2 * 4];
+    S3_DIB_FORMAT format;
+
+    memset(&info, 0, sizeof(info));
+    info.header.biSize = sizeof(S3_BITMAPINFOHEADER16);
+    info.header.biWidth = 3;
+    info.header.biHeight = 2;
+    info.header.biPlanes = 1;
+    info.header.biBitCount = 24;
+    CHECK(S3_DibFormat((S3_BITMAPINFO16 *)&info, &format));
+    CHECK(format.stride == 12 && format.colors == 0);
+
+    memset(&bitmap, 0, sizeof(bitmap));
+    memset(device_bits, 0x55, sizeof(device_bits));
+    bitmap.bmWidth = 3;
+    bitmap.bmHeight = 2;
+    bitmap.bmWidthBytes = 4;
+    bitmap.bmPlanes = 1;
+    bitmap.bmBitsPixel = 8;
+    bitmap.bmBits = device_bits;
+
+    /* 24-bpp DIB, bottom-up: scan 0 = bottom row. Pixels are B, G, R. */
+    memset(dib24, 0, sizeof(dib24));
+    dib24[2] = 0xFF;                 /* bottom-left red */
+    dib24[12 + 3] = 0xFF;            /* top-middle blue */
+    dib24[12 + 6] = dib24[12 + 7] = dib24[12 + 8] = 0xFF; /* top-right white */
+    CHECK(S3_DibBitmapBits(&bitmap, 0, 0, 2, dib24, (S3_BITMAPINFO16 *)&info) == 2);
+    CHECK(device_bits[4 + 0] == 0xE0);   /* bottom row (y = 1) red */
+    CHECK(device_bits[1] == 0x03);       /* top row blue */
+    CHECK(device_bits[2] == 0xFF);       /* top row white */
+    CHECK(device_bits[3] == 0x55);       /* padding untouched */
+
+    /* Read back as 24 bpp: red and white survive exactly. */
+    memset(dib24, 0xAA, sizeof(dib24));
+    CHECK(S3_DibBitmapBits(&bitmap, 1, 0, 2, dib24, (S3_BITMAPINFO16 *)&info) == 2);
+    CHECK(dib24[0] == 0 && dib24[1] == 0 && dib24[2] == 0xFF);
+    CHECK(dib24[12 + 6] == 0xFF && dib24[12 + 7] == 0xFF && dib24[12 + 8] == 0xFF);
+
+    /* 8-bpp DIB with a colour table; GetDIBits fills the device table. */
+    info.header.biBitCount = 8;
+    info.header.biClrUsed = 2;
+    info.colors[0].rgbRed = 0xFF;          /* index 0: red */
+    info.colors[1].rgbGreen = 0xFF;        /* index 1: green */
+    memset(dib8, 0, sizeof(dib8));
+    dib8[4 + 1] = 1;                        /* top row, middle pixel green */
+    CHECK(S3_DibBitmapBits(&bitmap, 0, 0, 2, dib8, (S3_BITMAPINFO16 *)&info) == 2);
+    CHECK(device_bits[0] == 0xE0 && device_bits[1] == 0x1C && device_bits[4] == 0xE0);
+    info.header.biClrUsed = 0;
+    CHECK(S3_DibBitmapBits(&bitmap, 1, 0, 1, dib8, (S3_BITMAPINFO16 *)&info) == 1);
+    CHECK(info.colors[0xE0].rgbRed == 0xFF && info.colors[0xE0].rgbBlue == 0);
+    CHECK(dib8[0] == 0xE0);
+
+    /* 1-bpp DIB into a monochrome bitmap. */
+    memset(&info.colors, 0, sizeof(info.colors));
+    info.header.biBitCount = 1;
+    info.colors[1].rgbRed = info.colors[1].rgbGreen = info.colors[1].rgbBlue = 0xFF;
+    memset(dib1, 0, sizeof(dib1));
+    dib1[0] = 0x80;          /* bottom row: white, black, black */
+    dib1[4] = 0x60;          /* top row: black, white, white */
+    memset(mono_bits, 0, sizeof(mono_bits));
+    bitmap.bmWidthBytes = 2;
+    bitmap.bmBitsPixel = 1;
+    bitmap.bmBits = mono_bits;
+    CHECK(S3_DibBitmapBits(&bitmap, 0, 0, 2, dib1, (S3_BITMAPINFO16 *)&info) == 2);
+    CHECK((mono_bits[0] & 0xE0) == 0x60 && (mono_bits[2] & 0xE0) == 0x80);
+
+    info.header.biCompression = 1; /* BI_RLE8 is declined */
+    CHECK(S3_DibBitmapBits(&bitmap, 0, 0, 2, dib1, (S3_BITMAPINFO16 *)&info) == 0);
+}
+
 int main(void)
 {
     test_full_vga_bridge_snapshot();
@@ -1959,6 +2043,7 @@ int main(void)
     test_realized_pen_and_output_polyline();
     test_realized_brushes();
     test_raster_rop3_and_targets();
+    test_dib_conversions();
     test_gdi_bitmap_and_pixel_path();
     test_setdibits_to_device_adapter();
     test_banded_dib_upload_reference();

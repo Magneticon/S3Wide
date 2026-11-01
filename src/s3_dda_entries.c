@@ -1,5 +1,6 @@
 #include "s3_abi.h"
 #include "s3_trace.h"
+#include "s3_dib.h"
 
 /* Remaining DDA entry points of the WfW 3.11 stock display-driver export
    table. Signatures follow the Windows 98 DDK reference for the same
@@ -136,14 +137,14 @@ S3_U16 S3_FAR S3_PASCAL DeviceBitmapBits(void S3_FAR *bitmap, S3_U16 get,
                                          void S3_FAR *draw_mode,
                                          S3_I16 S3_FAR *translate)
 {
-    (void)bitmap;
-    (void)dib_bits;
-    (void)bitmap_info;
+    S3_U16 copied;
     (void)draw_mode;
-    (void)translate;
-    S3_TRACE_EVENT("DeviceBitmapBits", get, scans);
-    (void)start;
-    return 0;
+    (void)translate; /* only supplied for palette devices */
+    copied = S3_DibBitmapBits(bitmap, get, start, scans, (S3_U8 S3_FAR *)dib_bits,
+                              (S3_BITMAPINFO16 S3_FAR *)bitmap_info);
+    S3_TRACE_EVENT(copied ? "DeviceBitmapBits" : "DeviceBitmapBits.fail",
+                   get, scans);
+    return copied;
 }
 
 S3_U16 S3_FAR S3_PASCAL Inquire(S3_CURSORINFO16 S3_FAR *cursor_info)

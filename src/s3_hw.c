@@ -325,9 +325,11 @@ int S3_Program720p8bppCandidate(const S3_MODE_IO S3_FAR *io,
     cr14 = (S3_U8)(snapshot->crtc[0x14] | 0x40);
     io->write_crtc(io->context, io->crtc_index_port, 0x14, cr14);
     io->write_crtc(io->context, io->crtc_index_port, 0x15, 0xD0);
-    /* DOSBox-X's VGA wrap model uses CR16=FF to end vertical blanking
-       without carrying an initial-frame skip into the active display. */
-    cr16 = 0xFF;
+    /* End vertical blanking at line 743, one before the vertical total (744),
+       as on real VGA timings. The earlier CR16=FF put the blank end past the
+       total and relied on DOSBox-X 2026.10.01's blanking-wrap model to show
+       all 720 lines; 0xE7 needs no wrap. Verified on DOSBox-X 2026.08.31. */
+    cr16 = 0xE7;
     io->write_crtc(io->context, io->crtc_index_port, 0x16, cr16);
     /* Preserve the captured CRTC byte/word address mode (CR17[6]); only
        select the intended display timing and count-by-two behavior. */

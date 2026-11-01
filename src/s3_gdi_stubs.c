@@ -2,6 +2,7 @@
 #include "s3_trace.h"
 #include "s3_brush.h"
 #include "s3_raster.h"
+#include "s3_dib.h"
 #if !defined(S3_HOST_TEST)
 #include <i86.h>
 #endif
@@ -216,8 +217,15 @@ S3_U16 S3_FAR S3_PASCAL SetDIBitsToDevice(
     S3_BITMAPINFOHEADER16 S3_FAR *header;
     S3_U32 row_stride, full_image_bytes, band_bytes;
     S3_U16 width, height;
-    S3_TRACE_EVENT("SetDIBitsToDevice", 0, 0);
+    S3_TRACE_EVENT("SetDIBitsToDevice", scan_start, scan_count);
     (void)draw_mode;
+
+    /* Without a translate table (non-palette device) the DIB carries RGB
+       colours: convert any 1/4/8/24-bpp DIB through the generic DIB path. */
+    if (translate == (S3_I16 S3_FAR *)0) {
+        return S3_DibToDevice(destination, (S3_I16)x, (S3_I16)y, scan_start,
+                              scan_count, clip_rect, dib_bits, bitmap_info);
+    }
 
     if (surface == (S3_SURFACE S3_FAR *)0 || bitmap_info ==
         (S3_BITMAPINFO16 S3_FAR *)0 || dib_bits == (S3_U8 S3_FAR *)0 ||
