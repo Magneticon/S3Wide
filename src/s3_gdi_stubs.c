@@ -1,4 +1,5 @@
 #include "s3_surface.h"
+#include "s3_trace.h"
 #if !defined(S3_HOST_TEST)
 #include <i86.h>
 #endif
@@ -35,6 +36,7 @@ S3_I16 S3_FAR S3_PASCAL BitBlt(void S3_FAR *destination,
     S3_BITMAP16 S3_FAR *source_bitmap;
     S3_DIB8_VIEW dib;
     S3_U32 data_bytes;
+    S3_TRACE_EVENT("BitBlt", 0, 0);
     (void)physical_brush;
     (void)draw_mode;
 
@@ -98,6 +100,7 @@ S3_U16 S3_FAR S3_PASCAL Output(void S3_FAR *destination,
     S3_DRAWMODE16 S3_FAR *mode;
     S3_U32 point_bytes;
     S3_U16 i;
+    S3_TRACE_EVENT("Output", 0, 0);
     (void)clip_rect;
     if (style != S3_OS_POLYLINE) {
         /* The DDA contract asks GDI to simulate unsupported Output styles. */
@@ -151,6 +154,7 @@ S3_U32 S3_FAR S3_PASCAL RealizeObject(S3_PDEV S3_FAR *device,
     S3_LPEN16 S3_FAR *logical_pen;
     S3_PPEN16 physical_pen;
     S3_U32 physical_color;
+    S3_TRACE_EVENT("RealizeObject", 0, 0);
     (void)device;
     (void)text_xform;
     if (signed_style < 0) {
@@ -203,6 +207,7 @@ S3_U32 S3_FAR S3_PASCAL Pixel(void S3_FAR *destination,
 {
     S3_SURFACE S3_FAR *surface = s3_device_surface(destination);
     S3_U8 index;
+    S3_TRACE_EVENT("Pixel", 0, 0);
     if (surface == (S3_SURFACE S3_FAR *)0 || x > 32767U || y > 32767U) {
         return S3_PIXEL_ERROR;
     }
@@ -235,6 +240,7 @@ S3_U16 S3_FAR S3_PASCAL SetDIBitsToDevice(
     S3_BITMAPINFOHEADER16 S3_FAR *header;
     S3_U32 row_stride, full_image_bytes, band_bytes;
     S3_U16 width, height;
+    S3_TRACE_EVENT("SetDIBitsToDevice", 0, 0);
     (void)draw_mode;
 
     if (surface == (S3_SURFACE S3_FAR *)0 || bitmap_info ==

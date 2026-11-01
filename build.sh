@@ -22,19 +22,29 @@ done
 
 export PATH="$WATCOM/$OWBIN:$PATH"
 export INCLUDE="$WATCOM/h${INCLUDE:+$incsep$INCLUDE}"
+# -zu: SS != DS (the driver runs on the caller's stack). -s: no stack probes;
+# Watcom's __STK assumes the module's own stack and its overflow path calls
+# MessageBox, which imports USER. Display drivers load before USER exists,
+# so any USER import makes Windows fail to load the driver.
+drvflags="-q -bt=windows -mc -zu -zc -s -i=include"
+# S3_TRACE=1 builds a bring-up driver that logs DDA calls to C:\S3TRACE.TXT.
+if [ "${S3_TRACE:-0}" = 1 ]; then
+    drvflags="$drvflags -dS3_TRACE"
+fi
 mkdir -p build
 rm -f build/*.obj build/driver_smoke.res build/s3wide_driver.dll build/host_checks
 
-wcc -q -bt=windows -mc -zu -zc -i=include -fo=build/s3_gdiinfo.obj src/s3_gdiinfo.c
-wcc -q -bt=windows -mc -zu -zc -i=include -fo=build/s3_color.obj src/s3_color.c
-wcc -q -bt=windows -mc -zu -zc -i=include -fo=build/s3_surface.obj src/s3_surface.c
-wcc -q -bt=windows -mc -zu -zc -i=include -fo=build/s3_hw.obj src/s3_hw.c
-wcc -q -bt=windows -mc -zu -zc -i=include -fo=build/s3_vga_state.obj src/s3_vga_state.c
-wcc -q -bt=windows -mc -zu -zc -i=include -fo=build/s3_win16_bridge.obj src/s3_win16_bridge.c
-wcc -q -bt=windows -mc -zu -zc -i=include -fo=build/s3_win16_native.obj src/s3_win16_native.c
-wcc -q -bt=windows -mc -zu -zc -i=include -fo=build/s3_device.obj src/s3_device.c
-wcc -q -bt=windows -mc -zu -zc -i=include -fo=build/s3_exports.obj src/s3_exports.c
-wcc -q -bt=windows -mc -zu -zc -i=include -fo=build/s3_gdi_stubs.obj src/s3_gdi_stubs.c
+wcc $drvflags -fo=build/s3_gdiinfo.obj src/s3_gdiinfo.c
+wcc $drvflags -fo=build/s3_color.obj src/s3_color.c
+wcc $drvflags -fo=build/s3_surface.obj src/s3_surface.c
+wcc $drvflags -fo=build/s3_hw.obj src/s3_hw.c
+wcc $drvflags -fo=build/s3_vga_state.obj src/s3_vga_state.c
+wcc $drvflags -fo=build/s3_win16_bridge.obj src/s3_win16_bridge.c
+wcc $drvflags -fo=build/s3_win16_native.obj src/s3_win16_native.c
+wcc $drvflags -fo=build/s3_device.obj src/s3_device.c
+wcc $drvflags -fo=build/s3_exports.obj src/s3_exports.c
+wcc $drvflags -fo=build/s3_gdi_stubs.obj src/s3_gdi_stubs.c
+wcc $drvflags -fo=build/s3_trace.obj src/s3_trace.c
 wrc -q -r -bt=windows -fo=build/driver_smoke.res src/driver_smoke.rc
 cp "$WATCOM/lib286/win/libentry.obj" build/libentry.obj
 wlink @src/driver_smoke.lnk

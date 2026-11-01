@@ -1,0 +1,9 @@
+LoadLibrary=PASS: S3WIDE.DRV loaded
+GetProcAddress_5=PASS: DDA Enable ordinal 5
+GetProcAddress_450=PASS: GetDriverResourceID ordinal 450
+Enable_InquireInfo=PASS: expected 110-byte 1280x720x8, one-plane GDIINFO
+Enable_MetricHiWin=PASS: metric high-resolution window extents are positive
+Enable_Device=PASS: device Enable fails closed with return 0
+GetDriverResourceID=PASS: requested resource ID is preserved
+FreeLibrary=PASS: unload call returned (API has no result)
+FINAL=PASS; failures=0

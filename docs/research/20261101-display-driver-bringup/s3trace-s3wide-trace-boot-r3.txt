@@ -1,0 +1,3 @@
+LibMain 01DE 01DF
+GetDriverResourceID 0003 03CF
+GetDriverResourceID.type 6F65 6D62

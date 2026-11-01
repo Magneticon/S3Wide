@@ -100,6 +100,9 @@ def parse(path: Path, map_path: Path | None = None) -> list[str]:
         ordinal = u16(data, cursor + 1 + length)
         names[ordinal] = name
         cursor += length + 3
+    # Ordinal 0 is the module name in the resident table but the description
+    # in the non-resident table; keep the module name.
+    module_name = names.get(0, "")
     cursor = nonresident_abs
     while cursor < len(data):
         length = data[cursor]
@@ -139,8 +142,8 @@ def parse(path: Path, map_path: Path | None = None) -> list[str]:
     required = {
         1: "BitBlt",
         2: "ColorInfo",
+        4: "Disable",
         5: "Enable",
-        6: "Disable",
         8: "Output",
         9: "Pixel",
         10: "RealizeObject",
@@ -174,8 +177,12 @@ def parse(path: Path, map_path: Path | None = None) -> list[str]:
     if b"S3 widescreen display driver\x00" not in version_info:
         raise ValueError("VERSIONINFO is missing the driver description")
     imported_modules, imported_ordinals = parse_import_fixups(data, ne_offset)
-    if "KERNEL" not in imported_modules:
-        raise ValueError(f"expected KERNEL import module; found {imported_modules!r}")
+    # Display drivers load before GDI and USER, so KERNEL must be the only
+    # imported module (a stray USER import makes Windows reject the driver).
+    if imported_modules != ["KERNEL"]:
+        raise ValueError(f"expected only the KERNEL import module; found {imported_modules!r}")
+    if module_name.upper() != "DISPLAY":
+        raise ValueError(f"expected module name DISPLAY; found {module_name!r}")
     kernel_ordinals = imported_ordinals.get("KERNEL", set())
     if len(kernel_ordinals) < len(REQUIRED_KERNEL_IMPORTS):
         raise ValueError(
@@ -189,6 +196,7 @@ def parse(path: Path, map_path: Path | None = None) -> list[str]:
             "KERNEL linker-map imports do not match distinct NE import ordinals: "
             f"{len(mapped_kernel_imports)} names vs {sorted(kernel_ordinals)}"
         )
+    lines.append(f"module_name={module_name}")
     lines.append(f"import_modules={imported_modules!r}")
     lines.append(f"kernel_import_ordinals={sorted(kernel_ordinals)!r}")
     lines.append(f"resource_records={resources!r}")

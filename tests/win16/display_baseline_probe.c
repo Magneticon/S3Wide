@@ -10,6 +10,7 @@
 
 #define RESULT_PATH "D:\\OUTPUT\\RESULT.TXT"
 #define SCREEN_PATH "D:\\OUTPUT\\SCREEN.BMP"
+#define READY_PATH "D:\\OUTPUT\\READY.TXT"
 #define SETTLE_MS 8000UL
 #define BAND_ROWS 16
 
@@ -163,14 +164,31 @@ cleanup:
     return stage;
 }
 
+/* Optional decimal argument: seconds to keep the desktop up after the
+   readback, so a host-side tool can capture the emulator window. */
+static DWORD hold_seconds(LPCSTR command_line)
+{
+    DWORD seconds = 0;
+
+    while (*command_line == ' ') {
+        ++command_line;
+    }
+    while (*command_line >= '0' && *command_line <= '9' && seconds < 600) {
+        seconds = seconds * 10 + (DWORD)(*command_line - '0');
+        ++command_line;
+    }
+    return seconds;
+}
+
 int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous,
                    LPSTR command_line, int show_command)
 {
     HDC screen;
+    HFILE ready;
+    DWORD hold = hold_seconds(command_line);
 
     (void)instance;
     (void)previous;
-    (void)command_line;
     (void)show_command;
 
     result_file = _lcreat(RESULT_PATH, 0);
@@ -188,9 +206,19 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous,
         put_int("CAPTURE_STAGE", (long)capture_screen(screen));
         ReleaseDC((HWND)0, screen);
     }
+    put_int("HOLD_SECONDS", (long)hold);
     put_line("SHUTDOWN_REQUESTED=YES");
     _lclose(result_file);
     result_file = HFILE_ERROR;
+
+    if (hold != 0) {
+        ready = _lcreat(READY_PATH, 0);
+        if (ready != HFILE_ERROR) {
+            _lwrite(ready, "READY\r\n", 7);
+            _lclose(ready);
+        }
+        settle(hold * 1000UL);
+    }
 
     /* End the isolated Windows session so DOSBox-X reaches its exit. */
     ExitWindows(0, 0);

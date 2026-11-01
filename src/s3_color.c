@@ -1,4 +1,5 @@
 #include "s3_abi.h"
+#include "s3_trace.h"
 
 #define S3_INDEX_MARKER 0xFF000000UL
 
@@ -68,5 +69,6 @@ S3_U32 S3_FAR S3_PASCAL ColorInfo(S3_PDEV S3_FAR *device,
                                   S3_U32 S3_FAR *physical_out)
 {
     (void)device;
+    S3_TRACE_EVENT("ColorInfo", (S3_U16)color_in, (S3_U16)(color_in >> 16));
     return S3_ColorInfoCore(color_in, physical_out);
 }

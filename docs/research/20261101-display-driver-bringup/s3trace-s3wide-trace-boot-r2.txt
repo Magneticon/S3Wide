@@ -1,0 +1,2 @@
+LibMain 01DE 01DF
+GetDriverResourceID 0003 0000

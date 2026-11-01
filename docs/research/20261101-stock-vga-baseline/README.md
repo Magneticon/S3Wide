@@ -78,7 +78,7 @@ before and after and did not change. In the disposable copy Windows rewrote
 
 - The screenshot is read back through GDI and the active display driver. It
   is not an emulator-side scanout capture, and it does not prove what
-  DOSBox-X displayed. The DOSBox-X integration device's VGA self-capture was
-  removed upstream, so an emulator-side capture still needs another route.
+  DOSBox-X displayed. An emulator-side capture route was added later the
+  same day; see [display-driver bring-up](../20261101-display-driver-bringup/README.md).
 - The guest has no stock S3 Windows driver; only VGA was tested.
 - No custom driver was installed or loaded.

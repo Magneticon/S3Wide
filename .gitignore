@@ -24,3 +24,6 @@ test/*.vhdx
 /tests/dosbox-x/*.EXE
 /tests/dosbox-x/*.o
 /tests/dosbox-x/capture/
+
+# Python bytecode
+__pycache__/
