@@ -72,7 +72,8 @@ def parse_linker_map(path: Path) -> set[str]:
     return imports
 
 
-def parse(path: Path, map_path: Path | None = None) -> list[str]:
+def parse(path: Path, map_path: Path | None = None,
+          allow_imported_resources: bool = False) -> list[str]:
     data = path.read_bytes()
     if data[:2] != b"MZ":
         raise ValueError("missing MZ signature")
@@ -148,7 +149,6 @@ def parse(path: Path, map_path: Path | None = None) -> list[str]:
         9: "Pixel",
         10: "RealizeObject",
         21: "SetDIBitsToDevice",
-        450: "GetDriverResourceID",
     }
     resources = parse_resources(data, ne_offset, resource_rel)
     lines = [f"format=NE16", f"file_bytes={len(data)}", f"entry_ordinals={len(ordinals)}"]
@@ -158,7 +158,15 @@ def parse(path: Path, map_path: Path | None = None) -> list[str]:
         lines.append(f"ordinal_{number}={actual_name};entry={'present' if present else 'missing'}")
         if not present or actual_name.lower() != expected_name.lower():
             raise ValueError(f"expected {expected_name} as entry ordinal {number}")
-    if resources != [("16", 1)]:
+    # Ordinal 450 is not exported: like the stock VGA.DRV, GDI then looks up
+    # the driver's resources by their own IDs.
+    if 450 in ordinals:
+        raise ValueError("GetDriverResourceID (ordinal 450) must not be exported")
+    if allow_imported_resources:
+        # Local bring-up build with resources copied from a licensed VGA.DRV.
+        if ("16", 1) not in resources or ("OEMBIN", 1) not in resources:
+            raise ValueError(f"expected VERSIONINFO and imported OEMBIN resources; found {resources!r}")
+    elif resources != [("16", 1)]:
         raise ValueError(
             "expected only numeric RT_VERSION resource ID 1; "
             f"found {resources!r}"
@@ -275,8 +283,12 @@ def u32(data: bytes, offset: int) -> int:
 
 
 if __name__ == "__main__":
+    args = sys.argv[1:]
+    allow_imported = "--allow-imported-resources" in args
+    args = [arg for arg in args if arg != "--allow-imported-resources"]
     try:
-        for line in parse(Path(sys.argv[1]), Path(sys.argv[2]) if len(sys.argv) > 2 else None):
+        for line in parse(Path(args[0]), Path(args[1]) if len(args) > 1 else None,
+                          allow_imported):
             print(line)
     except (OSError, IndexError, struct.error, ValueError) as exc:
         print(f"inspection failed: {exc}", file=sys.stderr)

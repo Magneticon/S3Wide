@@ -1,4 +1,5 @@
 #include "s3_device.h"
+#include "s3_trace.h"
 #include <string.h>
 
 #define S3_DEVICE_INIT_COOKIE 0x53334452UL
@@ -70,6 +71,9 @@ int S3_DeviceEnableWithOps(S3_PDEV S3_FAR *device,
                         (S3_U8 S3_FAR *)runtime->bridge.window,
                         runtime, s3_device_map_bank) ||
         !S3_InitializePDEV(device)) {
+        S3_TRACE_EVENT("device.surface.fail",
+                       (S3_U16)((S3_U32)runtime->bridge.window >> 16),
+                       (S3_U16)(S3_U32)runtime->bridge.window);
         if (!S3_Win16BridgeClose(&runtime->bridge)) {
             runtime->device = device;
             runtime->cleanup_pending = 1;

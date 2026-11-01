@@ -7,6 +7,7 @@
 #include "s3_win16_bridge.h"
 #include "s3_surface.h"
 #include "s3_device.h"
+#include "s3_brush.h"
 
 static int failures;
 
@@ -363,7 +364,11 @@ static void test_gdi_contract(void)
     CHECK(info.dpHorzRes == 1280 && info.dpVertRes == 720);
     CHECK(info.dpBitsPixel == 8 && info.dpPlanes == 1);
     CHECK(info.dpDEVICEsize == sizeof(S3_PDEV));
-    CHECK(info.dpRaster == 0);
+    CHECK(info.dpRaster == (S3_RC_BITBLT | S3_RC_BITMAP64 | S3_RC_GDI20_OUTPUT |
+                            S3_RC_DI_BITMAP | S3_RC_DIBTODEV));
+    CHECK(info.dpText == (S3_TC_CP_STROKE | S3_TC_RA_ABLE));
+    CHECK(info.dpPolygonals == S3_PC_SCANLINE && info.dpLines == S3_LC_POLYLINE);
+    CHECK(info.dpClip == S3_CP_RECTANGLE);
     CHECK(info.dpMLoWin.x > 0 && info.dpMLoWin.y > 0);
     CHECK(info.dpMHiWin.x > 0 && info.dpMHiWin.y > 0);
     CHECK(info.dpELoWin.x > 0 && info.dpELoWin.y > 0);
@@ -828,7 +833,6 @@ static void test_realized_pen_and_output_polyline(void)
     CHECK(Output(&pdev, 6, 1, (S3_POINT16 *)1, (void *)1,
                  (void *)1, (void *)1, (S3_RECT16 *)1) ==
           S3_DDA_NOT_SUPPORTED);
-    CHECK(RealizeObject(&pdev, 2, &logical_pen, &physical_pen, (void *)0) == 0);
 
     logical_pen.lopnWidth.x = -1;
     CHECK(RealizeObject(&pdev, S3_OBJ_PEN, &logical_pen, &physical_pen,
@@ -1786,6 +1790,74 @@ static void test_device_lifecycle_surface_and_retry(void)
     CHECK(Pixel(&device, 0, 0, 0xFF00005AUL, &draw_mode) == S3_PIXEL_ERROR);
 }
 
+static void test_realized_brushes(void)
+{
+    S3_PDEV pdev;
+    S3_LBRUSH16 logical;
+    S3_PBRUSH16 physical;
+    S3_BITMAP16 bitmap;
+    S3_U8 mono_bits[8 * 2];
+    S3_U8 color_bits[8 * 8];
+    unsigned int i;
+
+    memset(&pdev, 0, sizeof(pdev));
+    memset(&logical, 0, sizeof(logical));
+    logical.lbStyle = S3_BS_SOLID;
+    logical.lbColor = 0x000000FFUL; /* RGB red */
+    CHECK(RealizeObject(&pdev, S3_OBJ_BRUSH, &logical, (void *)0, (void *)0) ==
+          sizeof(S3_PBRUSH16));
+    memset(&physical, 0xA5, sizeof(physical));
+    CHECK(RealizeObject(&pdev, S3_OBJ_BRUSH, &logical, &physical, (void *)0) ==
+          sizeof(S3_PBRUSH16));
+    CHECK(physical.style == S3_BS_SOLID && physical.has_mask == 0);
+    for (i = 0; i < 64; ++i) {
+        CHECK(physical.color[i] == 0xE0); /* 3:3:2 red */
+    }
+    CHECK(RealizeObject(&pdev, (S3_U16)(0U - S3_OBJ_BRUSH), &logical, &physical,
+                        (void *)0) == 1);
+
+    logical.lbStyle = S3_BS_HATCHED;
+    logical.lbHatch = 0; /* HS_HORIZONTAL */
+    logical.lbColor = 0x00000000UL;
+    logical.lbBkColor = 0x00FFFFFFUL;
+    CHECK(RealizeObject(&pdev, S3_OBJ_BRUSH, &logical, &physical, (void *)0) ==
+          sizeof(S3_PBRUSH16));
+    CHECK(physical.has_mask == 1 && physical.mask[4] == 0xFF && physical.mask[0] == 0);
+    CHECK(physical.color[4 * 8 + 3] == 0x00 && physical.color[0] == 0xFF);
+    logical.lbHatch = 6;
+    CHECK(RealizeObject(&pdev, S3_OBJ_BRUSH, &logical, &physical, (void *)0) == 0);
+
+    logical.lbStyle = S3_BS_HOLLOW;
+    CHECK(S3_RealizeBrush(&logical, &physical) && physical.style == S3_BS_HOLLOW);
+    logical.lbStyle = 7;
+    CHECK(!S3_RealizeBrush(&logical, &physical));
+
+    /* Monochrome 8x8 pattern: 1 bits become white, 0 bits black. */
+    memset(&bitmap, 0, sizeof(bitmap));
+    memset(mono_bits, 0, sizeof(mono_bits));
+    mono_bits[0] = 0x80;
+    mono_bits[2 * 7] = 0x01;
+    bitmap.bmWidth = 8;
+    bitmap.bmHeight = 8;
+    bitmap.bmWidthBytes = 2;
+    bitmap.bmPlanes = 1;
+    bitmap.bmBitsPixel = 1;
+    bitmap.bmBits = mono_bits;
+    CHECK(S3_RealizePatternBrush(&bitmap, &physical));
+    CHECK(physical.color[0] == 0xFF && physical.color[1] == 0x00);
+    CHECK(physical.color[7 * 8 + 7] == 0xFF && physical.color[7 * 8 + 6] == 0x00);
+
+    /* 8-bpp pattern indices are copied unchanged. */
+    for (i = 0; i < sizeof(color_bits); ++i) color_bits[i] = (S3_U8)i;
+    bitmap.bmWidthBytes = 8;
+    bitmap.bmBitsPixel = 8;
+    bitmap.bmBits = color_bits;
+    CHECK(S3_RealizePatternBrush(&bitmap, &physical));
+    CHECK(physical.color[9] == 9 && physical.color[63] == 63);
+    bitmap.bmWidth = 4;
+    CHECK(!S3_RealizePatternBrush(&bitmap, &physical));
+}
+
 int main(void)
 {
     test_full_vga_bridge_snapshot();
@@ -1793,6 +1865,7 @@ int main(void)
     test_gdi_contract();
     test_gdi_entrypoint_declines();
     test_realized_pen_and_output_polyline();
+    test_realized_brushes();
     test_gdi_bitmap_and_pixel_path();
     test_setdibits_to_device_adapter();
     test_banded_dib_upload_reference();

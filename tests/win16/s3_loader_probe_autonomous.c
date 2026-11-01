@@ -44,7 +44,6 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous,
     S3_ENABLE_PROC enable_driver;
     S3_RESOURCE_ID_PROC resource_id;
     short info[55];
-    char dummy_pdev[32];
     unsigned int i;
     int result;
 
@@ -66,8 +65,6 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous,
         record_skip("GetProcAddress_5", "driver module unavailable");
         record_skip("GetProcAddress_450", "driver module unavailable");
         record_skip("Enable_InquireInfo", "driver module unavailable");
-        record_skip("GetDriverResourceID", "driver module unavailable");
-        record_skip("Enable_Device", "driver module unavailable");
         record_skip("FreeLibrary", "driver module unavailable");
         return finish_probe();
     }
@@ -77,8 +74,9 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous,
     resource_id = (S3_RESOURCE_ID_PROC)GetProcAddress(module, (LPCSTR)450);
     record_check("GetProcAddress_5", enable_driver != (S3_ENABLE_PROC)0,
                  "DDA Enable ordinal 5");
-    record_check("GetProcAddress_450", resource_id != (S3_RESOURCE_ID_PROC)0,
-                 "GetDriverResourceID ordinal 450");
+    /* Like the stock VGA.DRV, the driver does not export ordinal 450. */
+    record_check("GetProcAddress_450", resource_id == (S3_RESOURCE_ID_PROC)0,
+                 "GetDriverResourceID ordinal 450 is not exported");
 
     if (enable_driver != (S3_ENABLE_PROC)0) {
         for (i = 0; i < 55; ++i) info[i] = 0;
@@ -92,22 +90,10 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous,
         record_check("Enable_MetricHiWin",
                      info[28] > 0 && info[29] > 0,
                      "metric high-resolution window extents are positive");
-
-        for (i = 0; i < sizeof(dummy_pdev); ++i) dummy_pdev[i] = 0;
-        result = enable_driver(dummy_pdev, 0, (char FAR *)0, (char FAR *)0,
-                               (char FAR *)0);
-        record_check("Enable_Device", result == 0,
-                     "device Enable fails closed with return 0");
+        /* Device Enable is not called: it programs the S3 mode, and this
+           probe runs while the stock driver owns the display. */
     } else {
         record_skip("Enable_InquireInfo", "ordinal 5 was unavailable");
-        record_skip("Enable_Device", "ordinal 5 was unavailable");
-    }
-
-    if (resource_id != (S3_RESOURCE_ID_PROC)0) {
-        record_check("GetDriverResourceID", resource_id(7, (char FAR *)0) == 7,
-                     "requested resource ID is preserved");
-    } else {
-        record_skip("GetDriverResourceID", "ordinal 450 was unavailable");
     }
 
     FreeLibrary(module);

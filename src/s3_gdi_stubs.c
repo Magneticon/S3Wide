@@ -1,5 +1,6 @@
 #include "s3_surface.h"
 #include "s3_trace.h"
+#include "s3_brush.h"
 #if !defined(S3_HOST_TEST)
 #include <i86.h>
 #endif
@@ -154,20 +155,38 @@ S3_U32 S3_FAR S3_PASCAL RealizeObject(S3_PDEV S3_FAR *device,
     S3_LPEN16 S3_FAR *logical_pen;
     S3_PPEN16 physical_pen;
     S3_U32 physical_color;
-    S3_TRACE_EVENT("RealizeObject", 0, 0);
+    S3_TRACE_EVENT("RealizeObject", style, physical_object == (void S3_FAR *)0);
     (void)device;
     (void)text_xform;
     if (signed_style < 0) {
         object_type = (S3_U16)(0U - (S3_U16)signed_style);
-        /* This driver allocates no side resources for realized pens. */
-        if (object_type != S3_OBJ_PEN || logical_object == (void S3_FAR *)0 ||
-            physical_object == (void S3_FAR *)0 ||
-            !s3_far_pointer_span_fits(logical_object, sizeof(S3_PPEN16)) ||
-            !s3_far_pointer_span_fits(physical_object, sizeof(S3_PPEN16))) {
+        /* This driver allocates no side resources for realized pens or
+           brushes, so deleting one only validates the pointers. */
+        if ((object_type != S3_OBJ_PEN && object_type != S3_OBJ_BRUSH) ||
+            logical_object == (void S3_FAR *)0 ||
+            physical_object == (void S3_FAR *)0) {
             return 0;
         }
         return 1UL;
     }
+    if (style == S3_OBJ_BRUSH) {
+        if (logical_object == (void S3_FAR *)0 ||
+            !s3_far_pointer_span_fits(logical_object, sizeof(S3_LBRUSH16))) {
+            return 0;
+        }
+        if (physical_object == (void S3_FAR *)0) {
+            return (S3_U32)sizeof(S3_PBRUSH16);
+        }
+        if (!s3_far_pointer_span_fits(physical_object, sizeof(S3_PBRUSH16)) ||
+            !S3_RealizeBrush((const S3_LBRUSH16 S3_FAR *)logical_object,
+                             (S3_PBRUSH16 S3_FAR *)physical_object)) {
+            S3_TRACE_EVENT("RealizeObject.brush.fail",
+                           ((S3_LBRUSH16 S3_FAR *)logical_object)->lbStyle, 0);
+            return 0;
+        }
+        return (S3_U32)sizeof(S3_PBRUSH16);
+    }
+    /* OBJ_FONT and others: 0 tells GDI to use its own raster fonts. */
     if (style != S3_OBJ_PEN || logical_object == (void S3_FAR *)0 ||
         !s3_far_pointer_span_fits(logical_object, sizeof(S3_LPEN16))) {
         return 0;

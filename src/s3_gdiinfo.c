@@ -30,20 +30,24 @@ int S3_BuildGDIInfo(S3_GDIINFO S3_FAR *info)
     info->dpVertRes = (S3_I16)S3_HEIGHT;
     info->dpBitsPixel = (S3_I16)S3_BITS_PIXEL;
     info->dpPlanes = (S3_I16)S3_PLANES;
-    info->dpNumBrushes = 0;
-    info->dpNumPens = 0;
+    info->dpNumBrushes = -1; /* effectively unlimited */
+    info->dpNumPens = 100;
     info->futureuse = 0;
     info->dpNumFonts = 0;
     info->dpNumColors = 256;
     info->dpDEVICEsize = (S3_U16)sizeof(S3_PDEV);
 
-    /* No driver drawing function is advertised by this source milestone. */
-    info->dpCurves = 0;
-    info->dpLines = 0;
-    info->dpPolygonals = 0;
-    info->dpText = 0;
-    info->dpClip = 0;
-    info->dpRaster = 0;
+    /* The capability set of a stock-class 256-colour raster display, without
+       RC_PALETTE: the colours are a fixed 3:3:2 cube. GDI simulates curves,
+       polygons and styled or wide lines through polylines and scanlines, and
+       realizes raster fonts itself for ExtTextOut. */
+    info->dpCurves = 0;                      /* CC_NONE */
+    info->dpLines = S3_LC_POLYLINE;
+    info->dpPolygonals = S3_PC_SCANLINE;
+    info->dpText = S3_TC_CP_STROKE | S3_TC_RA_ABLE;
+    info->dpClip = S3_CP_RECTANGLE;
+    info->dpRaster = S3_RC_BITBLT | S3_RC_BITMAP64 | S3_RC_GDI20_OUTPUT |
+                     S3_RC_DI_BITMAP | S3_RC_DIBTODEV;
 
     info->dpAspectX = 100;
     info->dpAspectY = 100;

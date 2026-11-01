@@ -1,4 +1,5 @@
 #include "s3_surface.h"
+#include "s3_trace.h"
 
 static int s3_map(S3_SURFACE S3_FAR *surface, S3_U32 bank)
 {
@@ -38,10 +39,15 @@ int S3_SurfaceInit(S3_SURFACE S3_FAR *surface,
     if (surface == (S3_SURFACE S3_FAR *)0 || width == 0 || height == 0 ||
         pitch < width || bank_bytes == 0 || aperture_bytes < bank_bytes ||
         initial_window == (S3_U8 S3_FAR *)0 || map_bank == 0) {
+        S3_TRACE_EVENT("surface.init.args", (S3_U16)aperture_bytes,
+                       (S3_U16)(aperture_bytes >> 16));
+        S3_TRACE_EVENT("surface.init.geometry", pitch, height);
         return 0;
     }
     minimum_bytes = (S3_U32)pitch * (S3_U32)height;
     if (framebuffer_bytes < minimum_bytes) {
+        S3_TRACE_EVENT("surface.init.size", (S3_U16)framebuffer_bytes,
+                       (S3_U16)(framebuffer_bytes >> 16));
         return 0;
     }
     surface->width = width;

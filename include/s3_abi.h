@@ -208,8 +208,13 @@ typedef char S3_ASSERT_RECT_8[(sizeof(S3_RECT16) == 8) ? 1 : -1];
 #define S3_PLANES           1U
 #define S3_PITCH            1280U
 #define S3_BANK_BYTES       65536UL
-#define S3_FRAMEBUFFER_BYTES (S3_PITCH * S3_HEIGHT)
+/* 32-bit product: in the 16-bit driver build 1280U * 720U wraps to 4096. */
+#define S3_FRAMEBUFFER_BYTES ((unsigned long)S3_PITCH * (unsigned long)S3_HEIGHT)
 #define S3_APERTURE_PHYS    0x000A0000UL
+
+/* Checked by every compiler, so the 16-bit Watcom build catches overflow
+   that the 32-bit host tests cannot see. */
+typedef char S3_ASSERT_FRAMEBUFFER_BYTES[(S3_FRAMEBUFFER_BYTES == 921600UL) ? 1 : -1];
 
 #define S3_ENABLE_DEVICE    0x0000U
 #define S3_INQUIRE_INFO     0x0001U
@@ -222,6 +227,18 @@ typedef char S3_ASSERT_RECT_8[(sizeof(S3_RECT16) == 8) ? 1 : -1];
 #define S3_LS_SOLID         0UL
 #define S3_LS_NOLINE        5UL
 #define S3_OS_POLYLINE      18U
+
+/* GDIINFO capability bits (Windows 3.1 DDK values). */
+#define S3_LC_POLYLINE      0x0002
+#define S3_PC_SCANLINE      0x0008
+#define S3_TC_CP_STROKE     0x0004
+#define S3_TC_RA_ABLE       0x2000
+#define S3_CP_RECTANGLE     0x0001
+#define S3_RC_BITBLT        0x0001
+#define S3_RC_BITMAP64      0x0008
+#define S3_RC_GDI20_OUTPUT  0x0010
+#define S3_RC_DI_BITMAP     0x0080
+#define S3_RC_DIBTODEV      0x0200
 #define S3_DDA_NOT_SUPPORTED 0xFFFFU
 
 int S3_BuildGDIInfo(S3_GDIINFO S3_FAR *info);

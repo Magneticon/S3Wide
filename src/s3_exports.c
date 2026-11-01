@@ -1,12 +1,53 @@
 #include "s3_abi.h"
 #include "s3_device.h"
 #include "s3_trace.h"
+#if !defined(S3_HOST_TEST)
+#include <string.h>
+#include "s3_win16_hw.h"
+#include "s3_win16_native.h"
+#endif
 
 static S3_DEVICE_RUNTIME s3_display_runtime;
 
-/* The DOSBox-X-tested candidate is not a Windows protected-mode backend.
-   Refuse device enable until register I/O, aperture mapping, and rollback are
-   connected to the DDA lifecycle and the scanout is established. */
+#if !defined(S3_HOST_TEST)
+/* Program 1280x720x8 through direct VGA/S3 port I/O and map the 64 KiB A000
+   aperture through the selector bridge, which owns rollback. */
+static int s3_enable_display(S3_PDEV S3_FAR *device, S3_U16 style)
+{
+    S3_BRIDGE_OPS ops;
+
+    if (!s3_display_runtime.initialized) {
+        S3_DeviceRuntimeInit(&s3_display_runtime);
+    }
+    if (style & S3_INFO_CONTEXT) {
+        /* Information context: describe the device, touch no hardware. */
+        if (!S3_InitializePDEV(device)) return 0;
+        device->surface_state = (void S3_FAR *)0;
+        S3_TRACE_EVENT("Enable.info.ok", style, 0);
+        return 1;
+    }
+    if (s3_display_runtime.enabled) {
+        /* Another display PDEV shares the already programmed surface. */
+        if (!S3_InitializePDEV(device)) return 0;
+        device->surface_state = &s3_display_runtime.surface;
+        S3_TRACE_EVENT("Enable.device.shared", style, 0);
+        return 1;
+    }
+    _fmemset(&ops, 0, sizeof(ops));
+    if (!S3_Win16NativeSelectorOps(&ops) || !S3_Win16PortModeOps(&ops)) {
+        S3_TRACE_EVENT("Enable.device.noops", style, 0);
+        return 0;
+    }
+    if (!S3_DeviceEnableWithOps(device, &s3_display_runtime, &ops)) {
+        S3_TRACE_EVENT("Enable.device.fail", style,
+                       s3_display_runtime.cleanup_pending);
+        return 0;
+    }
+    S3_TRACE_EVENT("Enable.device.ok", style, 0);
+    return 1;
+}
+#endif
+
 int S3_FAR S3_PASCAL Enable(void S3_FAR *device, S3_I16 style,
                             char S3_FAR *device_type,
                             char S3_FAR *output_file,
@@ -24,13 +65,21 @@ int S3_FAR S3_PASCAL Enable(void S3_FAR *device, S3_I16 style,
         S3_TRACE_EVENT("Enable.inquire.ok", style, sizeof(S3_GDIINFO));
         return (int)sizeof(S3_GDIINFO);
     }
-    /* Unknown style bits are unsupported; EnableDevice currently fails closed. */
+    /* Unknown style bits are unsupported. */
     if (((S3_U16)style & (S3_U16)~S3_INFO_CONTEXT) != S3_ENABLE_DEVICE) {
         S3_TRACE_EVENT("Enable.unknown", style, 0);
         return 0;
     }
-    S3_TRACE_EVENT("Enable.device.refused", style, 0);
+    if (device == (void S3_FAR *)0) {
+        return 0;
+    }
+#if defined(S3_HOST_TEST)
+    /* Host builds have no port I/O or selectors: device Enable fails closed;
+       tests drive S3_DeviceEnableWithOps with injected operations instead. */
     return 0;
+#else
+    return s3_enable_display((S3_PDEV S3_FAR *)device, (S3_U16)style);
+#endif
 }
 
 int S3_FAR S3_PASCAL GetDriverResourceID(int resource_id,
