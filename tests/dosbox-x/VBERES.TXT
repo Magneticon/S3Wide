@@ -1,0 +1,1 @@
+PASS: VBE 0x023E 1280x720x8; banked full-frame write/readback

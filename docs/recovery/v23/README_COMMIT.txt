@@ -1,0 +1,2 @@
+Base commit: 2db39c9 (recovery/openwatcom-win16-abi)
+This archive contains local source changes for DOSBox-X S3 1280x720x8 cold-start scanout diagnosis, CR09/CR16/CR3A mode fixes, register rollback coverage, and preserved screenshots/register dumps. Cold-start and VBE-seeded candidates now produce the complete 1280x720 RGB332 pattern in DOSBox-X; delayed captures match the initial captures pixel-for-pixel. Windows GDI acceptance is not claimed. These source and evidence updates are not pushed or published to the S3 repository.

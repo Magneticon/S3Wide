@@ -1,0 +1,188 @@
+Logging: opened logfile 'capture/s3-cold-headless.log' successfully. All further logging will go to this file.
+DOSBox-X version 2026.10.01 Commit f1c4414 (Linux SDL2 64-bit)
+Prevent capture: 0
+SDL: version 2.32.4, Video dummy, Audio alsa
+Host keyboard layout is now  ()
+Mapper keyboard layout is now  ()
+SDL2 reports desktop display mode 1024 x 768
+Configured windowposition: -
+SDL: Current window pixel format: SDL_PIXELFORMAT_RGB888
+SDL: You are running in 24 bpp mode, this will slow down things!
+Releasing keyboard
+Screen report: Method 'None' (-1.000 x -1.000 pixels) at (0.000 x 0.000) (-1.000 x -1.000 mm) (-0.039 x -0.039 in) (-1.000 x -1.000 DPI)
+ISA BCLK: 8333333.333Hz (25000000/3)
+monopal: green, 
+Active save slot: 1 [Empty]
+USING AVI+ZMBV
+Pentium CMPXCHG8B emulation is enabled
+Max 1073741824 sz 16384
+Final 16384
+Final arrangement: Below 4GB = 16384KB, Above 4GB = 0KB
+MT32: failed to locate ROMs.
+MT32 emulation requires the PCM and CONTROL ROM files.
+To eliminate this error message, check the DOSBox-X wiki.
+The ROM files are: CM32L_CONTROL.ROM and CM32L_PCM.ROM or MT32_CONTROL.ROM and MT32_PCM.ROM
+MIDI:Opened device:none
+VOODOO LFB now at d0000000
+Serial1: BASE 3f8h
+Serial2: BASE 2f8h
+MPU-401 Registering I/O ports as if IBM PC MPU-401 at base 330h
+Memory I/O complexity optimization enabled aka option 'memory io optimization 1'. If the game or demo is unable to draw to the screen properly, set the option to false.
+The 'scanline render on demand' option is available and may provide a modest boost in video render performance if set to true.
+Allocated APM BIOS pm entry point at f000:ce20
+Writing code to fce20
+Writing code to fce40
+ISA Plug & Play BIOS enabled
+VGA ROM BIOS init callback
+pixratio 1.000, dw false, dh false
+Aspect ratio: 640 x 480  xToY=1.333 yToX=0.750
+menuScale=1
+surface consider=640x497 final=640x497
+WARNING: No translation support (to host) for code page 0
+DOS keyboard layout loaded with main language code US for layout us
+XMS: 50 handles allocated for use by the DOS environment
+EMS page frame at 0xe000-0xefff
+COMMAND.COM env size:             720 bytes
+COMMAND.COM main body (PSP):      0x0701 sz=0x009a
+COMMAND.COM environment block:    0x079c sz=0x002d
+COMMAND.COM stack:                0x071b
+DOS CON: 
+DOS CON: [44;1mษออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออป
+DOS CON: [0m
+DOS CON: [44;1mบ 
+DOS CON: [32mWelcome to DOSBox-X !          
+DOS CON: [33m               v2026.10.01, Linux SDL2 64-bit
+DOS CON: [37m บ
+DOS CON: [0m
+pixratio 1.350, dw false, dh false
+Aspect ratio: 720 x 540  xToY=1.333 yToX=0.750
+menuScale=1
+surface consider=720x417 final=720x417
+DOS CON: [44;1mบ                                                                              บ
+DOS CON: [0m
+DOS CON: [44;1mบ 
+DOS CON: [36mGetting started with DOSBox-X:                                              
+DOS CON: [37m บ
+DOS CON: [0m
+DOS CON: [44;1mบ                                                                              บ
+DOS CON: [0m
+DOS CON: [44;1mบ Type 
+DOS CON: [32mHELP
+DOS CON: [37m to see the list of shell commands, 
+DOS CON: [32mINTRO
+DOS CON: [37m for a brief introduction. บ
+DOS CON: [0m
+DOS CON: [44;1mบ You can also complete various tasks in DOSBox-X through the 
+DOS CON: [33mdrop-down menus
+DOS CON: [37m. บ
+DOS CON: [0m
+DOS CON: [44;1mบ 
+DOS CON: [32mExample
+DOS CON: [37m: Try select the 
+DOS CON: [33mTrueType font
+DOS CON: [37m or 
+DOS CON: [33mOpenGL pixel-perfect
+DOS CON: [37m output option. บ
+DOS CON: [0m
+DOS CON: [44;1mบ                                                                              บ
+DOS CON: [0m
+DOS CON: [44;1mบ 
+DOS CON: [36mUseful default shortcuts:                                                   
+DOS CON: [37m บ
+DOS CON: [0m
+DOS CON: [44;1mบ                                                                              บ
+DOS CON: [0m
+DOS CON: [44;1mบ - switch between windowed and full-screen mode with key combination 
+DOS CON: [31mF12 
+DOS CON: [37m+ 
+DOS CON: [31mF
+DOS CON: [37m 
+DOS CON: [37m บ
+DOS CON: [0m
+DOS CON: [44;1mบ - launch 
+DOS CON: [33mConfiguration Tool
+DOS CON: [37m using 
+DOS CON: [31mF12 
+DOS CON: [37m+ 
+DOS CON: [31mC
+DOS CON: [37m
+DOS CON: [37m, and 
+DOS CON: [33mMapper Editor
+DOS CON: [37m using 
+DOS CON: [31mF12 
+DOS CON: [37m+ 
+DOS CON: [31mM
+DOS CON: [37m  
+DOS CON: [37m บ
+DOS CON: [0m
+DOS CON: [44;1mบ - increase or decrease the emulation speed with 
+DOS CON: [31mF12 
+DOS CON: [37m+ 
+DOS CON: [31mPlus
+DOS CON: [37m
+DOS CON: [37m or 
+DOS CON: [31mF12 
+DOS CON: [37m+ 
+DOS CON: [31mMinus
+DOS CON: [37m   
+DOS CON: [37m บ
+DOS CON: [0m
+DOS CON: [44;1mบ                                                                              บ
+DOS CON: [0m
+DOS CON: [44;1mบ 
+DOS CON: [36mDOSBox-X project on the web:                                                
+DOS CON: [37m บ
+DOS CON: [0m
+DOS CON: [44;1mบ                                                                              บ
+DOS CON: [0m
+DOS CON: [44;1mบ 
+DOS CON: [32mHomepage of project
+DOS CON: [37m: 
+DOS CON: [33mhttps://dosbox-x.com/           
+DOS CON: [36mComplete DOS emulations
+DOS CON: [37m บ
+DOS CON: [0m
+DOS CON: [44;1mบ 
+DOS CON: [32mUser guides on Wiki
+DOS CON: [37m: 
+DOS CON: [33mhttps://dosbox-x.com/wiki
+DOS CON: [32m       
+DOS CON: [36mDOS, Windows 3.x and 9x
+DOS CON: [37m บ
+DOS CON: [0m
+DOS CON: [44;1mบ 
+DOS CON: [32mIssue or suggestion
+DOS CON: [37m: 
+DOS CON: [33mhttps://github.com/joncampbell123/dosbox-x/issues      
+DOS CON: [37m บ
+DOS CON: [0m
+DOS CON: [44;1mศออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออผ
+DOS CON: [0m
+DOS CON: [32mHAVE FUN WITH DOSBox-X !                                                       
+DOS CON: [0m
+DOS CON: Z:\>mount c .
+DOS CON: Drive C is mounted as local directory ./
+DOS CON: Z:\>c:
+DOS CON: C:\>S3COLD.EXE
+DOS CON: Cold raw S3 test from BIOS VGA text mode 3; no VBE calls
+Capturing Screenshot to /workspace/s3wide-recovery/tests/dosbox-x/capture/s3cold_012.png
+pixratio 1.500, dw false, dh false
+Aspect ratio: 1440 x 1080  xToY=1.333 yToX=0.750
+menuScale=1
+surface consider=1440x737 final=1440x737
+pixratio 1.350, dw false, dh false
+Aspect ratio: 720 x 540  xToY=1.333 yToX=0.750
+menuScale=1
+surface consider=720x417 final=720x417
+pixratio 1.500, dw false, dh false
+Aspect ratio: 1440 x 1080  xToY=1.333 yToX=0.750
+menuScale=1
+surface consider=1440x737 final=1440x737
+pixratio 1.333, dw false, dh false
+Aspect ratio: 1280 x 960  xToY=1.333 yToX=0.750
+menuScale=1
+surface consider=1280x737 final=1280x737
+Capturing Screenshot to /workspace/s3wide-recovery/tests/dosbox-x/capture/s3cold_013.png
+Capturing Screenshot to /workspace/s3wide-recovery/tests/dosbox-x/capture/s3cold_014.png
+DOS CON: C:\>exit
+--END OF LOG--

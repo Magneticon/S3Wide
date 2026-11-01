@@ -18,3 +18,9 @@ test/*.vhdx
 
 # Local overrides
 *.local.conf
+
+# Recovered v23 build outputs and generated test binaries (see docs/recovery/v23/PROVENANCE.md)
+/build/
+/tests/dosbox-x/*.EXE
+/tests/dosbox-x/*.o
+/tests/dosbox-x/capture/
