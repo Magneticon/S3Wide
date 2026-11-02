@@ -257,6 +257,15 @@ S3_U16 S3_FAR S3_PASCAL DeviceBitmapBits(void S3_FAR *bitmap, S3_U16 get,
     S3_U16 copied;
     (void)draw_mode;
     S3_TRACE_EVENT("DeviceBitmapBits.enter", get, scans);
+#if defined(S3_TRACE)
+    if (bitmap_info != (void S3_FAR *)0) {
+        const S3_BITMAPINFOHEADER16 S3_FAR *h = (const S3_BITMAPINFOHEADER16 S3_FAR *)bitmap_info;
+        S3_TRACE_EVENT("DeviceBitmapBits.dib", start, (S3_U16)h->biBitCount);
+        S3_TRACE_EVENT("DeviceBitmapBits.size", (S3_U16)h->biWidth, (S3_U16)h->biHeight);
+        S3_TRACE_EVENT("DeviceBitmapBits.bmp", ((const S3_BITMAP16 S3_FAR *)bitmap)->bmWidth,
+                       ((const S3_BITMAP16 S3_FAR *)bitmap)->bmHeight);
+    }
+#endif
     (void)translate; /* only supplied for palette devices */
     copied = S3_DibBitmapBits(bitmap, get, start, scans, (S3_U8 S3_FAR *)dib_bits,
                               (S3_BITMAPINFO16 S3_FAR *)bitmap_info);

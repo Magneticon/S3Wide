@@ -461,14 +461,18 @@ S3_U16 S3_DibBitmapBits(void S3_FAR *bitmap, S3_U16 get, S3_U16 start,
         S3_U16 end = (S3_U16)(start + scans);
         if (get) return 0;
         if (count > S3_DIB_ROW_MAX) count = S3_DIB_ROW_MAX;
-        if (end > target.height || end < start) end = target.height;
+        if (end > format.height || end < start) end = format.height;
         indices.bits = 8;
         s3_build_tables(info, &format);
         s3_rle_open(&reader, bits, format.image_bytes);
         for (scan = 0; scan < end; ++scan) {
             s3_rle_scan(&reader, scan, format.width, format.compression == S3_BI_RLE4);
             if (scan < start) continue;
-            y = (S3_I16)(target.height - 1 - scan);
+            y = (S3_I16)(format.height - 1 - scan);
+            if ((S3_U16)y >= target.height) {
+                ++done;
+                continue;
+            }
             s3_dib_to_target(&indices, target.kind, count, target.bytes_pixel, 0);
             if (!s3_rle_write(&target, 0, y, 0, count)) break;
             ++done;
@@ -481,9 +485,15 @@ S3_U16 S3_DibBitmapBits(void S3_FAR *bitmap, S3_U16 get, S3_U16 start,
         s3_build_tables(info, &format);
     }
     for (scan = 0; scan < scans; ++scan) {
-        /* DIB scan (start + scan) counted from the bottom of the bitmap. */
-        if ((S3_U32)start + scan >= target.height) break;
-        y = (S3_I16)(target.height - 1 - (start + scan));
+        /* DIB scan (start + scan) counts from the bottom of the DIB, whose
+           top row is bitmap row 0: GDI's StretchBlt emulation sets bands of
+           a few rows into a taller scratch bitmap and copies its top rows. */
+        if ((S3_U32)start + scan >= format.height) break;
+        y = (S3_I16)(format.height - 1 - (start + scan));
+        if ((S3_U16)y >= target.height) {
+            ++done;
+            continue;
+        }
         /* Pieces of up to S3_DIB_ROW_MAX pixels; each starts on a byte
            (4096 pixels are whole bytes at every DIB depth). */
         for (piece = 0; piece < count; piece = (S3_U16)(piece + n)) {

@@ -94,6 +94,29 @@ every run:
 The package (driver, VBEMODES.EXE, [INSTALL.TXT](../../../package/INSTALL.TXT), OEMSETUP.INF,
 checksums) is assembled locally under `output/release/`.
 
+## Stretched bitmaps at 16 and 32 bpp
+
+Reported by the owner: toolbar, ruler and picture corruption in Word at
+1920x1080x32 (`machine=svga_s3`). Reproduced with Paintbrush's tool palette:
+at 32 bpp it was drawn 3 rows low with stale rows on top, while BitBlt from
+the same bitmaps was exact.
+
+The driver has no StretchBlt, so GDI emulates it at 16 and 32 bpp in bands.
+For each band it reads the source with GetDIBits (24 bpp), stretches the DIB
+itself, sets it with SetDIBits into a scratch bitmap a few rows taller than
+the band, and BitBlts the top rows to the destination. The driver placed
+DIB scan 0 at the bottom row of the *bitmap*; GDI expects it at the bottom
+row of the *DIB*, whose top is bitmap row 0. DeviceBitmapBits now counts
+rows from the DIB's height and skips rows past the bitmap. At 8 bpp GDI
+stretches device bitmaps itself, which is why the S3 path never showed it.
+
+`DISPHUGE.EXE` (`tests/win16/display_huge_probe.c`) checks GDI's huge-bitmap
+layout against the driver (SetBitmapBits, then GetPixel), BitBlt, and
+StretchBlt to 1x, +10 and +37 rows, for 122x100, 122x450, 640x200 and
+300x300. Before: most stretched rows wrong at 32 bpp, and at 16 bpp. After:
+all rows correct at both depths. Paintbrush at 1280x720x32 on `svga_s3`
+then matches the 8-bpp S3 rendering except the palette approximations.
+
 ## Windows Setup (OEMSETUP.INF)
 
 `package/OEMSETUP.INF` (written by `package/make_oemsetup.py`) offers 39

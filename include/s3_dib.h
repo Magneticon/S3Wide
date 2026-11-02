@@ -24,8 +24,9 @@ typedef struct S3_DIB_FORMAT {
 int S3_DibFormat(const S3_BITMAPINFO16 S3_FAR *info, S3_DIB_FORMAT S3_FAR *format);
 
 /* DeviceBitmapBits: copy cScans DIB scans starting at DIB scan iStart
-   (scan 0 is the bottom row) into (fGet == 0) or out of (fGet != 0) a
-   memory bitmap. On Get the colour table is filled with the device colours.
+   (scan 0 is the bottom row of the DIB, whose top row is bitmap row 0;
+   rows past the bitmap are skipped) into (fGet == 0) or out of (fGet != 0)
+   a memory bitmap. On Get the colour table is filled with the device colours.
    Returns the number of scans copied, 0 on failure. */
 S3_U16 S3_DibBitmapBits(void S3_FAR *bitmap, S3_U16 get, S3_U16 start,
                         S3_U16 scans, S3_U8 S3_FAR *bits,

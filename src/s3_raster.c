@@ -418,9 +418,14 @@ static void s3_convert_source(S3_U16 src_kind, S3_U16 dst_kind, S3_U16 count,
                           s3_src_row[i] ? background : foreground, bp);
         }
     } else if (src_kind != S3_TARGET_MEM1 && dst_kind == S3_TARGET_MEM1) {
+        /* 0x00RRGGBB pixels: ROPs such as WHITENESS or an inverted black
+           leave the unused top byte set, which must not make a white pixel
+           differ from a white background. */
+        S3_U32 colour_bits = bp == 4 ? 0x00FFFFFFUL : 0xFFFFFFFFUL;
+        background &= colour_bits;
         for (i = 0; i < (S3_I16)count; ++i) {
-            s3_src_row[i] = (S3_U8)(S3_PixelLoad(s3_src_row + (S3_U16)i * bp, bp) ==
-                                    background ? 0xFF : 0x00);
+            s3_src_row[i] = (S3_U8)((S3_PixelLoad(s3_src_row + (S3_U16)i * bp, bp) &
+                                     colour_bits) == background ? 0xFF : 0x00);
         }
     }
 }

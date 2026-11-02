@@ -189,8 +189,8 @@ static DWORD hold_seconds(LPCSTR command_line)
 }
 
 /* Nonzero when word (lower case) appears anywhere in the command line,
-   in any case: "demo" opens applications before capture, "dosrun" first
-   runs a short DOS session. */
+   in any case: "demo" opens applications before capture, "apps" opens
+   File Manager and Paintbrush, "dosrun" first runs a short DOS session. */
 static int wants(LPCSTR command_line, LPCSTR word)
 {
     int i;
@@ -227,6 +227,12 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous,
            that ends by itself; Windows must come back drawn. */
         put_int("DOSRUN", (long)WinExec("COMMAND.COM /C VER", SW_SHOWNORMAL));
         settle(SETTLE_MS * 2);
+    }
+    if (wants(command_line, "apps")) {
+        /* Programs with toolbar and palette bitmaps. */
+        put_int("APPS_WINFILE", (long)WinExec("WINFILE.EXE", SW_SHOWNORMAL));
+        put_int("APPS_PBRUSH", (long)WinExec("PBRUSH.EXE", SW_SHOWNORMAL));
+        settle(SETTLE_MS);
     }
     if (wants(command_line, "demo")) {
         /* Put ordinary UI on screen: windows, menus, buttons, edit text. */

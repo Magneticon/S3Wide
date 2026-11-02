@@ -2514,6 +2514,29 @@ static void test_mono_pattern_colours(void)
     CHECK(S3_RasterBitBlt(&target, 0, 0, (void *)0, 0, 0, 8, 2, 0x00F00021UL,
                           &brush, (S3_DRAWMODE16 *)0));
     CHECK(S3_PixelLoad(bits, 4) == 0x00FFFFFFUL && S3_PixelLoad(bits + 28, 4) == 0);
+
+    /* Colour -> mono: WHITENESS stores 0xFFFFFFFF; with a white background
+       that pixel is still background (1), black is 0. */
+    {
+        S3_BITMAP16 mono;
+        S3_U8 mono_bits[2 * 2];
+        memset(&mono, 0, sizeof(mono));
+        mono.bmWidth = 8;
+        mono.bmHeight = 2;
+        mono.bmWidthBytes = 2;
+        mono.bmPlanes = 1;
+        mono.bmBitsPixel = 1;
+        mono.bmBits = mono_bits;
+        CHECK(S3_RasterBitBlt(&target, 0, 0, (void *)0, 0, 0, 4, 2, 0x00FF0062UL,
+                              (const S3_PBRUSH16 *)0, (S3_DRAWMODE16 *)0));
+        CHECK(S3_PixelLoad(bits, 4) == 0xFFFFFFFFUL);
+        mode.bkColor = 0x00FFFFFFUL;
+        mode.TextColor = 0;
+        memset(mono_bits, 0x55, sizeof(mono_bits));
+        CHECK(S3_RasterBitBlt(&mono, 0, 0, &target, 0, 0, 8, 2, 0x00CC0020UL,
+                              (const S3_PBRUSH16 *)0, &mode));
+        CHECK(mono_bits[0] == 0xF0 && mono_bits[2] == 0xF0);
+    }
     S3_ModeDefault(&s3_mode);
 }
 
@@ -2582,6 +2605,25 @@ static void test_wide_dibs(void)
     CHECK(S3_RasterBitBlt(&bitmap, 100, 0, &bitmap, 0, 0, 4900, 1, 0x00CC0020UL,
                           (const S3_PBRUSH16 *)0, (const S3_DRAWMODE16 *)0));
     for (i = 0; i < 4900; ++i) CHECK(S3_PixelLoad(device + (i + 100) * 4, 4) == i);
+
+    /* A 2-scan DIB set into a 4-row bitmap lands in rows 0 and 1 (the DIB's
+       top is the bitmap's top), as GDI's StretchBlt bands expect. */
+    info.header.biWidth = 2;
+    info.header.biHeight = 2;
+    info.header.biBitCount = 24;
+    info.header.biClrUsed = 0;
+    bitmap.bmWidth = 2;
+    bitmap.bmHeight = 4;
+    bitmap.bmWidthBytes = 8;
+    memset(device, 0x11, 32);
+    memset(dib24, 0, 16);
+    dib24[2] = 0xFF;          /* scan 0 (bottom of the DIB): red */
+    dib24[8 + 0] = 0xFF;      /* scan 1 (top of the DIB): blue */
+    CHECK(S3_DibBitmapBits(&bitmap, 0, 0, 2, dib24, (S3_BITMAPINFO16 *)&info) == 2);
+    CHECK(S3_PixelLoad(device + 0, 4) == 0x000000FFUL);   /* row 0: blue */
+    CHECK(S3_PixelLoad(device + 8, 4) == 0x00FF0000UL);   /* row 1: red */
+    CHECK(S3_PixelLoad(device + 16, 4) == 0x11111111UL);  /* rows 2-3 untouched */
+    CHECK(S3_PixelLoad(device + 24, 4) == 0x11111111UL);
     S3_ModeDefault(&s3_mode);
 }
 

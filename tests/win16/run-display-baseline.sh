@@ -21,6 +21,7 @@
 #   WIN_ARGS   extra WIN.COM switches, for example /b for BOOTLOG.TXT
 #   DEMO       1 = DISPBASE.EXE restores Program Manager and opens Calculator
 #              and Notepad before capturing
+#   APPS       1 = DISPBASE.EXE opens File Manager and Paintbrush
 #   DOSRUN     1 = DISPBASE.EXE first runs COMMAND.COM /C VER (a DOS session
 #              that ends by itself) and waits for Windows to come back
 #   VESA_HD    1 = list HD and unlimited-size VESA modes (needed for the
@@ -69,6 +70,9 @@ else
 fi
 if [ "$DEMO" = 1 ]; then
     probe_args="$probe_args demo"
+fi
+if [ "${APPS:-0}" = 1 ]; then
+    probe_args="$probe_args apps"
 fi
 if [ "${DOSRUN:-0}" = 1 ]; then
     probe_args="$probe_args dosrun"
