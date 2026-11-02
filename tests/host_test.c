@@ -2111,6 +2111,20 @@ static void test_raster_text(void)
     /* Row 1: A=1001, B bar -> 0 at x0, x3, x4. */
     CHECK(bits[2] == 0x67);
 
+    /* No characters with ETO_OPAQUE: only the opaque rectangle is filled,
+       with no font and no text (how Word paints its toolbar backgrounds). */
+    {
+        S3_RECT16 box;
+        S3_U32 old_bk = mode.bkColor;
+        memset(bits, 0xFF, sizeof(bits));
+        box.left = 2; box.top = 1; box.right = 6; box.bottom = 3;
+        mode.bkColor = 0;  /* black background */
+        CHECK(S3_TextOut(&bitmap, 0, 0, &clip, (const S3_U8 *)0, 0, (const void *)0,
+                         &mode, (S3_I16 *)0, &box, S3_ETO_OPAQUE) != 0);
+        CHECK(bits[0] == 0xFF && bits[2] == 0xC3 && bits[4] == 0xC3);
+        mode.bkColor = old_bk;
+    }
+
     /* Explicit widths and clipping. */
     memset(bits, 0xFF, sizeof(bits));
     widths[0] = 5; widths[1] = 3;

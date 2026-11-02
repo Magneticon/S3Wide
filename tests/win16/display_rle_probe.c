@@ -194,6 +194,38 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous,
         put_line(line);
         run_cases(screen, 8, 40);
         run_cases(screen, 4, 100);
+        {
+            /* ExtTextOut with no characters and ETO_OPAQUE fills its
+               rectangle with the background colour (Word paints toolbars
+               this way); compare with FillRect. */
+            RECT box;
+            HBRUSH brush = CreateSolidBrush(RGB(192, 192, 192));
+            long r;
+            SetRect(&box, 0, 200, W, 200 + H);
+            FillRect(screen, &box, brush);
+            DeleteObject(brush);
+            SetRect(&box, 80, 200, 80 + W, 200 + H);
+            PatBlt(screen, 80, 200, W, H, BLACKNESS);
+            SetBkColor(screen, RGB(192, 192, 192));
+            r = ExtTextOut(screen, 80, 200, ETO_OPAQUE, &box, "", 0, NULL);
+            report("TEXTFILL", compare(screen, 0, 200, 80, 200), r);
+            {
+                /* The same into a memory bitmap, then onto the screen. */
+                HDC memory_dc = CreateCompatibleDC(screen);
+                HBITMAP bitmap = CreateCompatibleBitmap(screen, W, H);
+                HBITMAP old = SelectObject(memory_dc, bitmap);
+                SelectObject(memory_dc, GetStockObject(ANSI_VAR_FONT));
+                PatBlt(memory_dc, 0, 0, W, H, BLACKNESS);
+                SetBkColor(memory_dc, RGB(192, 192, 192));
+                SetRect(&box, 0, 0, W, H);
+                r = ExtTextOut(memory_dc, 0, 0, ETO_OPAQUE, &box, NULL, 0, NULL);
+                BitBlt(screen, 160, 200, W, H, memory_dc, 0, 0, SRCCOPY);
+                report("TEXTFILL_MEMORY", compare(screen, 0, 200, 160, 200), r);
+                SelectObject(memory_dc, old);
+                DeleteObject(bitmap);
+                DeleteDC(memory_dc);
+            }
+        }
         ReleaseDC((HWND)0, screen);
     }
     put_line("SHUTDOWN_REQUESTED=YES");

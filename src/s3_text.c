@@ -166,6 +166,26 @@ S3_U32 S3_TextOut(void S3_FAR *device, S3_I16 x, S3_I16 y,
     const S3_U8 S3_FAR *glyph;
     int opaque, cached;
 
+    if (count == 0) {
+        /* No characters: only the opaque rectangle, a common way to fill a
+           rectangle with the background colour (Word paints its toolbars,
+           ruler and dialog panels so). No font or text is needed. */
+        if ((options & S3_ETO_OPAQUE) && opaque_rect != (const S3_RECT16 S3_FAR *)0) {
+            if (!S3_BindTarget(device, &target)) return 0;
+            left = 0;
+            top = 0;
+            right = (S3_I16)target.width;
+            bottom = (S3_I16)target.height;
+            s3_intersect(&left, &top, &right, &bottom, clip);
+            s3_intersect(&left, &top, &right, &bottom, opaque_rect);
+            bg = s3_target_color(&target, mode != (S3_DRAWMODE16 S3_FAR *)0
+                                              ? mode->bkColor : 0x00FFFFFFUL);
+            if (top < bottom && !s3_fill_rows(&target, left, top, right, bottom, bg)) {
+                return 0;
+            }
+        }
+        return 1;
+    }
     if (text == (const S3_U8 S3_FAR *)0 || !s3_font_open(font_info, &font)) {
         return 0;
     }

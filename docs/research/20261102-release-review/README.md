@@ -129,6 +129,21 @@ expected. Word's remaining black areas are not reproduced with the programs
 on hand; a tracing build (dib.skip and blit-source events) went to the
 owner to capture Word's calls.
 
+The owner's trace (26,243 calls) showed 952 failures, all the same:
+ExtTextOut with no characters and ETO_OPAQUE, which applications use to fill
+a rectangle with the background colour. S3_TextOut required a font and text
+before looking at the count, so it failed, and Word's toolbar faces, ruler
+and Tip of the Day panel (drawn into memory bitmaps) were never painted.
+Into the screen GDI covered the failure; into a memory bitmap it did not.
+An empty string now fills just the opaque rectangle. `DISPRLE.EXE` gained
+TEXTFILL checks against FillRect: into a memory bitmap the old driver left
+all 2048 pixels black, the new one matches exactly.
+
+The same trace showed the owner's SYSTEM.INI asking for 1920x1080x16 on
+`machine=svga_s3` without DOSBox-X's high-definition VESA options, so the
+BIOS lacked the mode and the driver fell back to the native 1280x720x8 S3
+mode (`vbe.nomode`, `mode.selected 0001`).
+
 ## Windows Setup (OEMSETUP.INF)
 
 `package/OEMSETUP.INF` (written by `package/make_oemsetup.py`) offers 39
