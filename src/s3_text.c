@@ -8,6 +8,13 @@
 
 static S3_U8 S3_FAR_DATA s3_text_row[S3_ROW_BYTES_MAX];
 
+/* Per-character glyph, width and position, worked out once per call
+   instead of once per scan row, for strings up to S3_TEXT_CACHE long. */
+#define S3_TEXT_CACHE 256
+static const S3_U8 S3_FAR *S3_FAR_DATA s3_cache_glyph[S3_TEXT_CACHE];
+static S3_U16 S3_FAR_DATA s3_cache_width[S3_TEXT_CACHE];
+static S3_I16 S3_FAR_DATA s3_cache_x[S3_TEXT_CACHE];
+
 /* Font segment fields by offset from fsVersion. */
 #define S3_FS_VERSION      0
 #define S3_FS_PIXWIDTH     86
@@ -152,12 +159,12 @@ S3_U32 S3_TextOut(void S3_FAR *device, S3_I16 x, S3_I16 y,
     S3_FONT font;
     S3_TARGET target;
     S3_I16 i, extent = 0, break_err, row_y, px, glyph_x, left, top, right, bottom;
-    S3_I16 cell_left, cell_right;
+    S3_I16 cell_left, cell_right, first, last;
     S3_U16 index, width, column_bytes, bp;
     S3_U32 fg, bg;
     S3_U8 bits;
     const S3_U8 S3_FAR *glyph;
-    int opaque;
+    int opaque, cached;
 
     if (text == (const S3_U8 S3_FAR *)0 || !s3_font_open(font_info, &font)) {
         return 0;
@@ -202,6 +209,19 @@ S3_U32 S3_TextOut(void S3_FAR *device, S3_I16 x, S3_I16 y,
     cell_right = (S3_I16)(x + extent) < right ? (S3_I16)(x + extent) : right;
     if (cell_right - cell_left > S3_TEXT_ROW_MAX) return 0;
 
+    cached = cell_left < cell_right && count <= S3_TEXT_CACHE;
+    if (cached) {
+        glyph_x = x;
+        break_err = mode != (S3_DRAWMODE16 S3_FAR *)0 ? mode->BreakErr : 0;
+        for (i = 0; i < count; ++i) {
+            index = s3_font_index(&font, text[i]);
+            s3_cache_width[i] = s3_font_width(&font, index);
+            s3_cache_glyph[i] = s3_font_glyph(&font, index);
+            s3_cache_x[i] = glyph_x;
+            glyph_x = (S3_I16)(glyph_x + s3_advance(&font, text[i], i, char_widths,
+                                                    mode, &break_err));
+        }
+    }
     if (cell_left < cell_right) {
         for (row_y = (S3_I16)(y > top ? y : top);
              row_y < (S3_I16)(y + (S3_I16)font.height) && row_y < bottom; ++row_y) {
@@ -212,22 +232,47 @@ S3_U32 S3_TextOut(void S3_FAR *device, S3_I16 x, S3_I16 y,
                 return 0;
             }
             glyph_x = x;
-            break_err = mode != (S3_DRAWMODE16 S3_FAR *)0 ? mode->BreakErr : 0;
+            if (!cached) break_err = mode != (S3_DRAWMODE16 S3_FAR *)0 ? mode->BreakErr : 0;
             for (i = 0; i < count; ++i) {
-                index = s3_font_index(&font, text[i]);
-                width = s3_font_width(&font, index);
-                glyph = s3_font_glyph(&font, index);
+                if (cached) {
+                    width = s3_cache_width[i];
+                    glyph = s3_cache_glyph[i];
+                    glyph_x = s3_cache_x[i];
+                } else {
+                    index = s3_font_index(&font, text[i]);
+                    width = s3_font_width(&font, index);
+                    glyph = s3_font_glyph(&font, index);
+                }
                 column_bytes = font.height;
-                for (px = 0; px < (S3_I16)width; ++px) {
-                    S3_I16 sx = (S3_I16)(glyph_x + px);
-                    if (sx < cell_left || sx >= cell_right) continue;
-                    bits = glyph[(S3_U16)(px >> 3) * column_bytes + (S3_U16)(row_y - y)];
-                    if (bits & (0x80U >> (px & 7))) {
-                        S3_PixelStore(s3_text_row + (S3_U16)(sx - cell_left) * bp, fg, bp);
+                /* Columns of this glyph inside the cells. */
+                first = (S3_I16)(cell_left - glyph_x);
+                if (first < 0) first = 0;
+                last = (S3_I16)(cell_right - glyph_x);
+                if (last > (S3_I16)width) last = (S3_I16)width;
+                if (first < last) {
+                    const S3_U8 S3_FAR *column = glyph + (S3_U16)(row_y - y);
+                    S3_U8 S3_FAR *out = s3_text_row +
+                                        (S3_U16)(glyph_x + first - cell_left) * bp;
+                    px = first;
+                    while (px < last) {
+                        /* One glyph byte covers 8 columns. */
+                        S3_I16 stop = (S3_I16)((px | 7) + 1);
+                        bits = column[(S3_U16)(px >> 3) * column_bytes];
+                        if (stop > last) stop = last;
+                        if (bits == 0) {
+                            out += (S3_U16)(stop - px) * bp;
+                            px = stop;
+                            continue;
+                        }
+                        for (; px < stop; ++px, out += bp) {
+                            if (bits & (0x80U >> (px & 7))) S3_PIXEL_PUT(out, fg, bp);
+                        }
                     }
                 }
-                glyph_x = (S3_I16)(glyph_x + s3_advance(&font, text[i], i, char_widths,
-                                                        mode, &break_err));
+                if (!cached) {
+                    glyph_x = (S3_I16)(glyph_x + s3_advance(&font, text[i], i, char_widths,
+                                                            mode, &break_err));
+                }
             }
             if (!S3_TargetWriteRow(&target, cell_left, row_y,
                                    (S3_U16)(cell_right - cell_left), s3_text_row)) {

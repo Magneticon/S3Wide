@@ -1,6 +1,19 @@
 #include "s3_surface.h"
 #include "s3_trace.h"
 
+/* bank, in_bank = offset split by the bank size. Every backend uses 64 KiB
+   banks, which avoids a 32-bit divide per pixel or span. */
+#define S3_SPLIT_BANK(surface, offset, bank, in_bank) \
+    do { \
+        if ((surface)->bank_bytes == 65536UL) { \
+            (bank) = (offset) >> 16; \
+            (in_bank) = (offset) & 0xFFFFUL; \
+        } else { \
+            (bank) = (offset) / (surface)->bank_bytes; \
+            (in_bank) = (offset) % (surface)->bank_bytes; \
+        } \
+    } while (0)
+
 static int s3_map(S3_SURFACE S3_FAR *surface, S3_U32 bank)
 {
     S3_U8 S3_FAR *window;
@@ -38,8 +51,7 @@ S3_U8 S3_FAR *S3_SurfaceSpan(S3_SURFACE S3_FAR *surface, S3_I16 x, S3_I16 y,
     if (offset >= surface->framebuffer_bytes) {
         return (S3_U8 S3_FAR *)0;
     }
-    bank = offset / surface->bank_bytes;
-    in_bank = offset % surface->bank_bytes;
+    S3_SPLIT_BANK(surface, offset, bank, in_bank);
     if (in_bank >= surface->aperture_bytes || !s3_map(surface, bank)) {
         return (S3_U8 S3_FAR *)0;
     }
@@ -104,8 +116,7 @@ int S3_SurfacePutPixel(S3_SURFACE S3_FAR *surface,
     if (offset >= surface->framebuffer_bytes) {
         return 0;
     }
-    bank = offset / surface->bank_bytes;
-    in_bank = offset % surface->bank_bytes;
+    S3_SPLIT_BANK(surface, offset, bank, in_bank);
     if (in_bank >= surface->aperture_bytes || !s3_map(surface, bank)) {
         return 0;
     }
@@ -251,11 +262,26 @@ int S3_LineVisit(S3_I16 x0, S3_I16 y0, S3_I16 x1, S3_I16 y1,
     }
     if (y_first > x_first) x_first = y_first;
     if (y_after < x_after) x_after = y_after;
-    for (k = x_first; k < x_after; ++k) {
-        S3_I32 x = s3_line_coord_at(&line, 1, k);
-        S3_I32 y = s3_line_coord_at(&line, 0, k);
-        if (!plot(context, (S3_I16)x, (S3_I16)y)) {
-            return 0;
+    if (x_first >= x_after) return 1;
+    {
+        /* Step from the first visible point: the minor axis advances when
+           the remainder of (k * minor + major / 2) / major wraps, which is
+           s3_line_coord_at without a multiply and divide per pixel. */
+        S3_I32 x = s3_line_coord_at(&line, 1, x_first);
+        S3_I32 y = s3_line_coord_at(&line, 0, x_first);
+        S3_U32 r = (x_first * line.minor + line.major / 2) % line.major;
+        for (k = x_first; k < x_after; ++k) {
+            if (!plot(context, (S3_I16)x, (S3_I16)y)) {
+                return 0;
+            }
+            r += line.minor;
+            if (r >= line.major) {
+                r -= line.major;
+                if (line.x_major) y += line.sy;
+                else x += line.sx;
+            }
+            if (line.x_major) x += line.sx;
+            else y += line.sy;
         }
     }
     return 1;
@@ -323,8 +349,7 @@ int S3_SurfaceGetPixel(S3_SURFACE S3_FAR *surface,
     if (offset >= surface->framebuffer_bytes) {
         return 0;
     }
-    bank = offset / surface->bank_bytes;
-    in_bank = offset % surface->bank_bytes;
+    S3_SPLIT_BANK(surface, offset, bank, in_bank);
     if (in_bank >= surface->aperture_bytes || !s3_map(surface, bank)) {
         return 0;
     }

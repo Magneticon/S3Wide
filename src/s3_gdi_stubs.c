@@ -39,7 +39,14 @@ S3_I16 S3_FAR S3_PASCAL BitBlt(void S3_FAR *destination,
                                void S3_FAR *draw_mode)
 {
     int ok, excluded;
-    excluded = S3_DisplayExclude(destination, source);
+    S3_RECT16 destination_rect, source_rect;
+    S3_DisplaySetRect(&destination_rect, (S3_I16)destination_x, (S3_I16)destination_y,
+                      (S3_I32)(S3_I16)destination_x + (S3_I16)width,
+                      (S3_I32)(S3_I16)destination_y + (S3_I16)height);
+    S3_DisplaySetRect(&source_rect, (S3_I16)source_x, (S3_I16)source_y,
+                      (S3_I32)(S3_I16)source_x + (S3_I16)width,
+                      (S3_I32)(S3_I16)source_y + (S3_I16)height);
+    excluded = S3_DisplayExclude(destination, &destination_rect, source, &source_rect);
     ok = S3_RasterBitBlt(destination, (S3_I16)destination_x, (S3_I16)destination_y,
                          source, (S3_I16)source_x, (S3_I16)source_y,
                          (S3_I16)width, (S3_I16)height, (S3_U32)rop3,
@@ -136,8 +143,49 @@ S3_U16 S3_FAR S3_PASCAL Output(void S3_FAR *destination,
                                void S3_FAR *draw_mode,
                                S3_RECT16 S3_FAR *clip_rect)
 {
-    int excluded = S3_DisplayExclude(destination, (void S3_FAR *)0);
-    S3_U16 result = s3_output_body(destination, style, point_count, points, physical_pen,
+    S3_RECT16 bounds;
+    const S3_RECT16 S3_FAR *use = (const S3_RECT16 S3_FAR *)0;
+    S3_I32 left, top, right, bottom;
+    S3_U16 i;
+    int excluded;
+    S3_U16 result;
+
+    if (style != S3_OS_SCANLINES && style != S3_OS_POLYLINE) {
+        /* Scan brackets and styles GDI simulates draw nothing here. */
+        return s3_output_body(destination, style, point_count, points, physical_pen,
+                              physical_brush, draw_mode, clip_rect);
+    }
+    if (S3_DisplaySwCursorActive() && points != (S3_POINT16 S3_FAR *)0 &&
+        point_count >= 1 &&
+        s3_far_pointer_span_fits(points, (S3_U32)point_count * sizeof(S3_POINT16))) {
+        if (style == S3_OS_SCANLINES) {
+            /* points[0].y is the line; later points are (start, end) x pairs. */
+            top = points[0].y;
+            bottom = top + 1;
+            left = 32767L;
+            right = -32768L;
+            for (i = 1; i < point_count; ++i) {
+                if (points[i].x < left) left = points[i].x;
+                if (points[i].y > right) right = points[i].y;
+            }
+        } else {
+            left = right = points[0].x;
+            top = bottom = points[0].y;
+            for (i = 1; i < point_count; ++i) {
+                if (points[i].x < left) left = points[i].x;
+                if (points[i].x > right) right = points[i].x;
+                if (points[i].y < top) top = points[i].y;
+                if (points[i].y > bottom) bottom = points[i].y;
+            }
+            ++right;
+            ++bottom;
+        }
+        S3_DisplaySetRect(&bounds, left, top, right, bottom);
+        use = &bounds;
+    }
+    excluded = S3_DisplayExclude(destination, use, (void S3_FAR *)0,
+                                 (const S3_RECT16 S3_FAR *)0);
+    result = s3_output_body(destination, style, point_count, points, physical_pen,
                                     physical_brush, draw_mode, clip_rect);
     S3_DisplayUnexclude(excluded);
     return result;
@@ -265,8 +313,14 @@ S3_U32 S3_FAR S3_PASCAL Pixel(void S3_FAR *destination,
                                S3_U16 x, S3_U16 y, S3_U32 physical_color,
                                void S3_FAR *draw_mode)
 {
-    int excluded = S3_DisplayExclude(destination, (void S3_FAR *)0);
-    S3_U32 result = s3_pixel_body(destination, x, y, physical_color, draw_mode);
+    S3_RECT16 bounds;
+    int excluded;
+    S3_U32 result;
+    S3_DisplaySetRect(&bounds, (S3_I16)x, (S3_I16)y, (S3_I32)(S3_I16)x + 1,
+                      (S3_I32)(S3_I16)y + 1);
+    excluded = S3_DisplayExclude(destination, &bounds, (void S3_FAR *)0,
+                                 (const S3_RECT16 S3_FAR *)0);
+    result = s3_pixel_body(destination, x, y, physical_color, draw_mode);
     S3_DisplayUnexclude(excluded);
     return result;
 }
@@ -350,8 +404,20 @@ S3_U16 S3_FAR S3_PASCAL SetDIBitsToDevice(
                                S3_BITMAPINFO16 S3_FAR *bitmap_info,
                                S3_I16 S3_FAR *translate)
 {
-    int excluded = S3_DisplayExclude(destination, (void S3_FAR *)0);
-    S3_U16 result = s3_setdibitstodevice_body(destination, x, y, scan_start, scan_count,
+    S3_RECT16 bounds;
+    const S3_RECT16 S3_FAR *use = (const S3_RECT16 S3_FAR *)0;
+    int excluded;
+    S3_U16 result;
+    if (bitmap_info != (S3_BITMAPINFO16 S3_FAR *)0) {
+        /* The DIB's rows land between y and y + biHeight. */
+        S3_DisplaySetRect(&bounds, (S3_I16)x, (S3_I16)y,
+                          (S3_I32)(S3_I16)x + (S3_I32)bitmap_info->bmiHeader.biWidth,
+                          (S3_I32)(S3_I16)y + (S3_I32)bitmap_info->bmiHeader.biHeight);
+        use = &bounds;
+    }
+    excluded = S3_DisplayExclude(destination, use, (void S3_FAR *)0,
+                                 (const S3_RECT16 S3_FAR *)0);
+    result = s3_setdibitstodevice_body(destination, x, y, scan_start, scan_count,
                                     clip_rect, draw_mode, dib_bits, bitmap_info, translate);
     S3_DisplayUnexclude(excluded);
     return result;

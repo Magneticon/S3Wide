@@ -36,7 +36,12 @@ int S3_SwCursorSetShape(S3_SWCURSOR S3_FAR *cursor,
                         const S3_CURSORSHAPE16 S3_FAR *shape);
 void S3_SwCursorMove(S3_SWCURSOR S3_FAR *cursor, S3_I16 x, S3_I16 y);
 void S3_SwCursorCheck(S3_SWCURSOR S3_FAR *cursor);
-void S3_SwCursorExclude(S3_SWCURSOR S3_FAR *cursor);
+/* Hold the cursor for a drawing call that touches bounds (screen
+   coordinates, right/bottom exclusive; NULL = anywhere). The cursor is
+   erased only when bounds overlap it; otherwise it stays on screen and
+   moves are deferred until Unexclude. */
+void S3_SwCursorExclude(S3_SWCURSOR S3_FAR *cursor,
+                        const S3_RECT16 S3_FAR *bounds);
 void S3_SwCursorUnexclude(S3_SWCURSOR S3_FAR *cursor);
 
 #endif

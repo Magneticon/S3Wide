@@ -23,6 +23,11 @@
 #              and Notepad before capturing
 #   VESA_HD    1 = list HD and unlimited-size VESA modes (needed for the
 #              driver's VBE backend at 1280x720, 1920x1080, 3840x2160 ...)
+#   CYCLES     DOSBox-X cycles setting (default max); for timing runs with
+#              DISPBNCH.EXE use a fixed rate such as "fixed 100000" so the
+#              guest's clock counts emulated instructions, not host speed
+#   FRAMESKIP  frames the emulator skips between redraws (default 0); a
+#              large value leaves more host time for emulation at 4K
 # Requires Git Bash or MSYS2 on Windows (uses cygpath).
 set -eu
 
@@ -45,6 +50,8 @@ FALLBACK=${FALLBACK:-0}
 WIN_ARGS=${WIN_ARGS:-}
 DEMO=${DEMO:-0}
 VESA_HD=${VESA_HD:-0}
+CYCLES=${CYCLES:-max}
+FRAMESKIP=${FRAMESKIP:-0}
 if [ "$VESA_HD" = 1 ]; then
     vesa_options="vesa modelist width limit=0
 vesa modelist height limit=0
@@ -120,13 +127,14 @@ $vesa_options
 [cpu]
 core=normal
 cputype=pentium
-cycles=max
+cycles=$CYCLES
 # Stop on a guest triple fault instead of rebooting into a loop, so the
 # time limit ends the run and the failure stays visible.
 reset on triple fault=false
 always report triple fault=true
 
 [render]
+frameskip=$FRAMESKIP
 aspect=false
 scaler=none
 

@@ -1,21 +1,19 @@
 #include "s3_raster.h"
 #include "s3_pixel.h"
 #include "s3_trace.h"
-#include <string.h>
+#include "s3_copy.h"
 #if !defined(S3_HOST_TEST)
 #include <i86.h>
-#define s3_fmemcpy _fmemcpy
-#define s3_fmemset _fmemset
-#else
-#define s3_fmemcpy memcpy
-#define s3_fmemset memset
 #endif
+#define s3_fmemcpy S3_COPY
+#define s3_fmemset S3_FILL
 
 /* Widest run processed per pass; wider blits are split into chunks. */
 #define S3_ROW_MAX S3_ROW_PIXELS_MAX
 
 static S3_U8 S3_FAR_DATA s3_dst_row[S3_ROW_BYTES_MAX];
 static S3_U8 S3_FAR_DATA s3_src_row[S3_ROW_BYTES_MAX];
+static S3_U8 S3_FAR_DATA s3_pat_row[S3_ROW_BYTES_MAX];
 
 int S3_BindTarget(void S3_FAR *device, S3_TARGET S3_FAR *target)
 {
@@ -103,6 +101,20 @@ static S3_U8 S3_FAR *s3_mem_row(const S3_TARGET S3_FAR *target, S3_U16 y)
 #else
     return target->bits + (S3_U32)y * target->stride;
 #endif
+}
+
+S3_U8 S3_FAR *S3_TargetPixel(const S3_TARGET S3_FAR *target, S3_I16 x, S3_I16 y)
+{
+    S3_U16 contiguous;
+    switch (target->kind) {
+    case S3_TARGET_SCREEN:
+        /* Pitches are whole pixels, so a pixel never straddles a bank. */
+        return S3_SurfaceSpan(target->surface, x, y, &contiguous);
+    case S3_TARGET_MEMC:
+        return s3_mem_row(target, (S3_U16)y) + (S3_U16)x * target->bytes_pixel;
+    default:
+        return (S3_U8 S3_FAR *)0;
+    }
 }
 
 int S3_TargetReadRow(const S3_TARGET S3_FAR *target, S3_I16 x, S3_I16 y,
@@ -205,6 +217,81 @@ S3_U8 S3_Rop3(S3_U8 rop, S3_U8 pattern, S3_U8 source, S3_U8 destination)
     return (S3_U8)S3_Rop3Long(rop, pattern, source, destination);
 }
 
+/* d = rop(p, s, d) over bytes bytes of row buffers. A ROP3 is bitwise, so
+   it applies to raw bytes whatever the pixel size. An operand the ROP does
+   not use may be NULL; it then reads d, which cannot change the result.
+   Dwords at a time (native with -3), common ROPs unrolled. */
+#define S3_ROP_LOOP(expr) \
+    for (i = 0; i < words; ++i) { \
+        S3_U32 D = dw[i], S = sw[i], P = pw[i]; \
+        (void)D; (void)S; (void)P; \
+        dw[i] = (S3_U32)(expr); \
+    } \
+    break
+
+void S3_RopBytes(S3_U8 rop, S3_U8 S3_FAR *d, const S3_U8 S3_FAR *p,
+                 const S3_U8 S3_FAR *s, S3_U16 bytes)
+{
+    S3_U16 i, words = (S3_U16)(bytes / 4);
+    S3_U32 S3_FAR *dw;
+    const S3_U32 S3_FAR *pw;
+    const S3_U32 S3_FAR *sw;
+
+    if (p == (const S3_U8 S3_FAR *)0) p = d;
+    if (s == (const S3_U8 S3_FAR *)0) s = d;
+    dw = (S3_U32 S3_FAR *)d;
+    pw = (const S3_U32 S3_FAR *)p;
+    sw = (const S3_U32 S3_FAR *)s;
+
+    /* The common ROPs as one or two passes of a dword row operation. */
+    switch (rop) {
+    case 0x55: S3_RowOp(S3_ROWOP_NOT, dw, dw, words); goto tail;
+    case 0x5A: S3_RowOp(S3_ROWOP_XOR, dw, pw, words); goto tail;
+    case 0xA0: S3_RowOp(S3_ROWOP_AND, dw, pw, words); goto tail;
+    case 0xFA: S3_RowOp(S3_ROWOP_OR, dw, pw, words); goto tail;
+    case 0x0A: S3_RowOp(S3_ROWOP_ANDN, dw, pw, words); goto tail;
+    case 0x0F: S3_RowOp(S3_ROWOP_COPYN, dw, pw, words); goto tail;
+    case 0xF0: s3_fmemcpy(dw, pw, words * 4); goto tail;
+    case 0xCC: s3_fmemcpy(dw, sw, words * 4); goto tail;
+    case 0x33: S3_RowOp(S3_ROWOP_COPYN, dw, sw, words); goto tail;
+    case 0x66: S3_RowOp(S3_ROWOP_XOR, dw, sw, words); goto tail;
+    case 0x88: S3_RowOp(S3_ROWOP_AND, dw, sw, words); goto tail;
+    case 0xEE: S3_RowOp(S3_ROWOP_OR, dw, sw, words); goto tail;
+    case 0x22: S3_RowOp(S3_ROWOP_ANDN, dw, sw, words); goto tail;
+    case 0xBB: S3_RowOp(S3_ROWOP_ORN, dw, sw, words); goto tail;
+    case 0x44: /* S & ~D */
+        S3_RowOp(S3_ROWOP_NOT, dw, dw, words);
+        S3_RowOp(S3_ROWOP_AND, dw, sw, words);
+        goto tail;
+    case 0x11: /* ~(D | S) */
+        S3_RowOp(S3_ROWOP_OR, dw, sw, words);
+        S3_RowOp(S3_ROWOP_NOT, dw, dw, words);
+        goto tail;
+    case 0x99: /* ~(D ^ S) */
+        S3_RowOp(S3_ROWOP_XOR, dw, sw, words);
+        S3_RowOp(S3_ROWOP_NOT, dw, dw, words);
+        goto tail;
+    default:
+        break;
+    }
+    switch (rop) {
+    case 0x00: S3_ROP_LOOP(0);
+    case 0xFF: S3_ROP_LOOP(0xFFFFFFFFUL);
+    case 0xC0: S3_ROP_LOOP(P & S);               /* MERGECOPY */
+    case 0xFB: S3_ROP_LOOP(P | ~S | D);          /* PATPAINT */
+    case 0xB8: S3_ROP_LOOP(((D ^ P) & S) ^ P);   /* S ? D : P */
+    case 0xE2: S3_ROP_LOOP(((D ^ P) & S) ^ D);   /* S ? P : D */
+    case 0xAC: S3_ROP_LOOP(((D ^ S) & P) ^ S);   /* P ? D : S */
+    case 0xCA: S3_ROP_LOOP(((D ^ S) & P) ^ D);   /* P ? S : D */
+    default:   S3_ROP_LOOP(S3_Rop3Long(rop, P, S, D));
+    }
+tail:
+    for (i = (S3_U16)(words * 4); i < bytes; ++i) {
+        d[i] = S3_Rop3(rop, p[i], s[i], d[i]);
+    }
+}
+#undef S3_ROP_LOOP
+
 void S3_FillPixels(S3_U8 S3_FAR *out, S3_U32 pixel, S3_U16 count,
                    S3_U16 bytes_pixel)
 {
@@ -219,6 +306,24 @@ void S3_FillPixels(S3_U8 S3_FAR *out, S3_U32 pixel, S3_U16 count,
     for (done = 1; done < count; done = (S3_U16)(done * 2)) {
         S3_U16 n = (S3_U16)(count - done < done ? count - done : done);
         s3_fmemcpy(out + done * bytes_pixel, out, n * bytes_pixel);
+    }
+}
+
+/* Brush row for target row y, pixels x .. x+count-1, in target format.
+   The pattern repeats every 8 pixels, so 8 are built and then doubled. */
+static void s3_pattern_row(const S3_PBRUSH16 S3_FAR *brush, S3_U16 kind,
+                           S3_U16 bp, S3_I16 x, S3_I16 y, S3_U16 count)
+{
+    S3_U16 i, done, n = count < 8 ? count : 8;
+    S3_U32 p;
+    for (i = 0; i < n; ++i) {
+        p = brush->color[(((S3_U16)y & 7) << 3) | ((S3_U16)(x + i) & 7)];
+        if (kind == S3_TARGET_MEM1) p = S3_PixelIsLight(p) ? 0xFF : 0x00;
+        S3_PixelStore(s3_pat_row + i * bp, p, bp);
+    }
+    for (done = n; done < count; done = (S3_U16)(done * 2)) {
+        S3_U16 m = (S3_U16)(count - done < done ? count - done : done);
+        s3_fmemcpy(s3_pat_row + done * bp, s3_pat_row, m * bp);
     }
 }
 
@@ -243,6 +348,34 @@ static int s3_clip(S3_I16 S3_FAR *dx, S3_I16 S3_FAR *dy,
     if ((S3_I32)*dy + *height > (S3_I32)destination->height)
         *height = (S3_I16)(destination->height - (S3_U16)*dy);
     return *width > 0 && *height > 0;
+}
+
+/* rop applied in place to count pixels of colour-target row y from x. */
+static int s3_rop_target_row(const S3_TARGET S3_FAR *target, S3_I16 x, S3_I16 y,
+                             S3_U16 count, S3_U8 rop, const S3_U8 S3_FAR *p,
+                             const S3_U8 S3_FAR *s)
+{
+    S3_U8 S3_FAR *span;
+    S3_U16 contiguous, run, bp = target->bytes_pixel;
+
+    if (target->kind == S3_TARGET_MEMC) {
+        S3_RopBytes(rop, s3_mem_row(target, (S3_U16)y) + (S3_U16)x * bp, p, s,
+                    (S3_U16)(count * bp));
+        return 1;
+    }
+    while (count != 0) {
+        span = S3_SurfaceSpan(target->surface, x, y, &contiguous);
+        if (span == (S3_U8 S3_FAR *)0) return 0;
+        run = (S3_U16)(contiguous / bp);
+        if (run > count) run = count;
+        if (run == 0) return 0;
+        S3_RopBytes(rop, span, p, s, (S3_U16)(run * bp));
+        if (p != (const S3_U8 S3_FAR *)0) p += run * bp;
+        if (s != (const S3_U8 S3_FAR *)0) s += run * bp;
+        x = (S3_I16)(x + run);
+        count = (S3_U16)(count - run);
+    }
+    return 1;
 }
 
 /* Constant fill: one prepared row copied into every row of the rectangle. */
@@ -294,12 +427,11 @@ int S3_RasterBitBlt(void S3_FAR *destination, S3_I16 dx, S3_I16 dy,
     int use_p = (((rop >> 4) ^ rop) & 0x0F) != 0;
     int use_s = (((rop >> 2) ^ rop) & 0x33) != 0;
     int use_d = (((rop >> 1) ^ rop) & 0x55) != 0;
-    S3_U32 background, foreground, p, s, d;
-    S3_I16 row, first_row, step, i, chunk_x, chunk;
+    S3_U32 background, foreground, p;
+    S3_I16 row, first_row, step, chunk_x, chunk;
     S3_I16 ty, sy_row;
     S3_U16 bp;
-    int plain_copy;
-    S3_U8 S3_FAR *dp;
+    int plain_copy, in_place;
 
     if (!S3_BindTarget(destination, &dst)) return 0;
     if (use_s && !S3_BindTarget(source, &src)) return 0;
@@ -340,6 +472,10 @@ int S3_RasterBitBlt(void S3_FAR *destination, S3_I16 dx, S3_I16 dy,
         first_row = (S3_I16)(height - 1);
         step = -1;
     }
+    /* ROPs that read the destination combine straight into a colour
+       target (frame buffer or bitmap) instead of a copy of its row. Any
+       source row is buffered first, so overlap is still safe. */
+    in_place = use_d && dst.kind != S3_TARGET_MEM1;
     plain_copy = rop == 0xCC && use_s &&
                  (src.kind == S3_TARGET_MEM1) == (dst.kind == S3_TARGET_MEM1);
 
@@ -361,22 +497,31 @@ int S3_RasterBitBlt(void S3_FAR *destination, S3_I16 dx, S3_I16 dy,
                                   src.kind == S3_TARGET_MEM1 ? bp : src.bytes_pixel,
                                   background, foreground);
             }
-            if (use_d) {
+            if (use_d && !in_place) {
                 if (!S3_TargetReadRow(&dst, (S3_I16)(dx + chunk_x), ty,
                                       (S3_U16)chunk, s3_dst_row)) return 0;
             }
-            dp = s3_dst_row;
-            for (i = 0; i < chunk; ++i, dp += bp) {
-                p = 0;
-                if (use_p) {
-                    p = brush->color[(((S3_U16)ty & 7) << 3) |
-                                     ((S3_U16)(dx + chunk_x + i) & 7)];
-                    if (dst.kind == S3_TARGET_MEM1) p = S3_PixelIsLight(p) ? 0xFF : 0x00;
+            if (use_p) {
+                s3_pattern_row(brush, dst.kind, bp, (S3_I16)(dx + chunk_x), ty,
+                               (S3_U16)chunk);
+                if (rop == 0xF0) {
+                    /* PATCOPY with a pattern brush: the row is the result. */
+                    if (!S3_TargetWriteRow(&dst, (S3_I16)(dx + chunk_x), ty,
+                                           (S3_U16)chunk, s3_pat_row)) return 0;
+                    continue;
                 }
-                s = use_s ? S3_PixelLoad(s3_src_row + (S3_U16)i * bp, bp) : 0;
-                d = use_d ? S3_PixelLoad(dp, bp) : 0;
-                S3_PixelStore(dp, S3_Rop3Long(rop, p, s, d), bp);
             }
+            if (in_place) {
+                if (!s3_rop_target_row(&dst, (S3_I16)(dx + chunk_x), ty, (S3_U16)chunk,
+                                       rop, use_p ? s3_pat_row : (const S3_U8 S3_FAR *)0,
+                                       use_s ? s3_src_row : (const S3_U8 S3_FAR *)0)) {
+                    return 0;
+                }
+                continue;
+            }
+            S3_RopBytes(rop, s3_dst_row, use_p ? s3_pat_row : (const S3_U8 S3_FAR *)0,
+                        use_s ? s3_src_row : (const S3_U8 S3_FAR *)0,
+                        (S3_U16)(chunk * bp));
             if (!S3_TargetWriteRow(&dst, (S3_I16)(dx + chunk_x), ty,
                                    (S3_U16)chunk, s3_dst_row)) return 0;
         }

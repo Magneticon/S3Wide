@@ -67,8 +67,9 @@ code. No trace from any VESA run recorded a failed driver call.
   is the GDI readback.
 - The test tool's GDI readback of a 4K screen takes many minutes in
   emulation; the driver itself has no per-frame cost there.
-- All drawing is done by the CPU through 16-bit C. Large repaints at 4K are
-  slow; no acceleration exists on this path.
+- All drawing is done by the CPU; no acceleration exists on this path. The
+  2 November speed work ([`20261102-4k-speed`](../20261102-4k-speed/README.md))
+  made common operations 2x to 87x faster at 4K.
 - DOS boxes, full-screen switching and Windows' own mode-change paths are
   untested on the VESA path (no VDD for it).
 - 24-bpp packed modes are not used; 32 bpp gives the same 16M colours.

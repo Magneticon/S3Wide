@@ -2,6 +2,7 @@
 # Build the autonomous Win16 probes used by run-display-baseline.sh:
 #   build/DISPBASE.EXE  display baseline and GDI screen readback
 #   build/S3AUTO.EXE    S3WIDE.DRV loader probe (no message boxes)
+#   build/DISPBNCH.EXE GDI timing benchmark on the screen DC
 set -eu
 cd "$(dirname "$0")"
 
@@ -27,4 +28,7 @@ wcl -q -zW -bt=windows -ml -i="$WATCOM/h/win" \
 wcl -q -zW -bt=windows -ml -i="$WATCOM/h/win" \
     -fo=../../build/s3_loader_probe_autonomous.obj \
     -fe=../../build/S3AUTO.EXE s3_loader_probe_autonomous.c
-echo "Built build/DISPBASE.EXE and build/S3AUTO.EXE (not executed by this script)."
+wcl -q -zW -bt=windows -ml -i="$WATCOM/h/win" \
+    -fo=../../build/display_bench_probe.obj \
+    -fe=../../build/DISPBNCH.EXE display_bench_probe.c
+echo "Built build/DISPBASE.EXE, build/S3AUTO.EXE and build/DISPBNCH.EXE (not executed by this script)."

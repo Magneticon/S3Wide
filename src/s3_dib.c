@@ -1,15 +1,19 @@
 #include "s3_dib.h"
 #include "s3_pixel.h"
+#include "s3_copy.h"
 #if !defined(S3_HOST_TEST)
 #include <i86.h>
 /* KERNEL's selector increment for walking huge (> 64 KiB) memory. */
 extern void S3_FAR S3_PASCAL __AHINCR(void);
 #endif
+#define s3_fmemcpy S3_COPY
+#define s3_fmemset S3_FILL
 
 #define S3_DIB_ROW_MAX S3_ROW_PIXELS_MAX
 
 static S3_U8 S3_FAR_DATA s3_dib_row[S3_ROW_BYTES_MAX];
 static S3_U8 S3_FAR_DATA s3_device_row[S3_ROW_BYTES_MAX];
+static S3_U8 S3_FAR_DATA s3_index_row[S3_DIB_ROW_MAX];
 static S3_U32 s3_table_pixel[256];
 static S3_U8 s3_table_mono[256];
 
@@ -90,16 +94,14 @@ static void s3_dib_scan(S3_U8 S3_FAR *bits, S3_U32 offset, S3_U8 S3_FAR *row,
                         S3_U16 bytes, int to_dib)
 {
     S3_U32 contiguous;
-    S3_U16 run, i;
+    S3_U16 run;
     S3_U8 S3_FAR *at;
 
     while (bytes != 0) {
         at = s3_dib_address(bits, offset, &contiguous);
         run = contiguous < bytes ? (S3_U16)contiguous : bytes;
-        for (i = 0; i < run; ++i) {
-            if (to_dib) at[i] = row[i];
-            else row[i] = at[i];
-        }
+        if (to_dib) s3_fmemcpy(at, row, run);
+        else s3_fmemcpy(row, at, run);
         row += run;
         offset += run;
         bytes = (S3_U16)(bytes - run);
@@ -124,42 +126,58 @@ static void s3_build_tables(const S3_BITMAPINFO16 S3_FAR *info,
 static void s3_dib_to_target(const S3_DIB_FORMAT S3_FAR *format, S3_U16 kind,
                              S3_U16 count, S3_U16 bp)
 {
-    S3_U16 i, value;
-    S3_U32 pixel;
+    S3_U16 i;
     int mono = kind == S3_TARGET_MEM1;
     S3_U8 S3_FAR *out = s3_device_row;
-    for (i = 0; i < count; ++i) {
-        switch (format->bits) {
-        case 1:
-            value = (s3_dib_row[i >> 3] >> (7 - (i & 7))) & 1;
-            break;
-        case 4:
-            value = (i & 1) ? (s3_dib_row[i >> 1] & 0x0F) : (s3_dib_row[i >> 1] >> 4);
-            break;
-        case 8:
-            value = s3_dib_row[i];
-            break;
-        default: /* 24 bpp: B, G, R */
-            value = 0;
-            break;
-        }
-        if (format->bits == 24) {
-            S3_U8 red = s3_dib_row[i * 3 + 2], green = s3_dib_row[i * 3 + 1];
-            S3_U8 blue = s3_dib_row[i * 3];
-            if (mono) {
-                *out++ = s3_rgb_to_mono(red, green, blue);
-                continue;
+    const S3_U8 S3_FAR *in = s3_dib_row;
+    const S3_U8 S3_FAR *index = s3_dib_row;
+
+    if (format->bits == 24) { /* B, G, R */
+        if (mono) {
+            for (i = 0; i < count; ++i, in += 3) {
+                *out++ = s3_rgb_to_mono(in[2], in[1], in[0]);
             }
-            pixel = S3_RGBToPixel((S3_U32)red | ((S3_U32)green << 8) |
-                                  ((S3_U32)blue << 16));
-        } else if (mono) {
-            *out++ = s3_table_mono[value];
-            continue;
+        } else if (bp == 4) {
+            /* 0x00RRGGBB is B, G, R, 0 in memory. */
+            for (i = 0; i < count; ++i, in += 3, out += 4) {
+                out[0] = in[0];
+                out[1] = in[1];
+                out[2] = in[2];
+                out[3] = 0;
+            }
+        } else if (bp == 2) {
+            for (i = 0; i < count; ++i, in += 3, out += 2) {
+                *(S3_U16 S3_FAR *)out = (S3_U16)(((S3_U16)(in[2] >> 3) << 11) |
+                                                 ((S3_U16)(in[1] >> 2) << 5) |
+                                                 (in[0] >> 3));
+            }
         } else {
-            pixel = s3_table_pixel[value];
+            for (i = 0; i < count; ++i, in += 3) {
+                *out++ = (S3_U8)S3_RGBToPixel((S3_U32)in[2] | ((S3_U32)in[1] << 8) |
+                                              ((S3_U32)in[0] << 16));
+            }
         }
-        S3_PixelStore(out, pixel, bp);
-        out += bp;
+        return;
+    }
+    if (format->bits != 8) {
+        /* Unpack 1- and 4-bpp indices to one byte each. */
+        for (i = 0; i < count; ++i) {
+            s3_index_row[i] = format->bits == 4
+                ? (S3_U8)((i & 1) ? (s3_dib_row[i >> 1] & 0x0F) : (s3_dib_row[i >> 1] >> 4))
+                : (S3_U8)((s3_dib_row[i >> 3] >> (7 - (i & 7))) & 1);
+        }
+        index = s3_index_row;
+    }
+    if (mono) {
+        for (i = 0; i < count; ++i) out[i] = s3_table_mono[index[i]];
+    } else if (bp == 4) {
+        for (i = 0; i < count; ++i) ((S3_U32 S3_FAR *)out)[i] = s3_table_pixel[index[i]];
+    } else if (bp == 2) {
+        for (i = 0; i < count; ++i) {
+            ((S3_U16 S3_FAR *)out)[i] = (S3_U16)s3_table_pixel[index[i]];
+        }
+    } else {
+        for (i = 0; i < count; ++i) out[i] = (S3_U8)s3_table_pixel[index[i]];
     }
 }
 
@@ -189,8 +207,17 @@ static void s3_target_to_dib(const S3_DIB_FORMAT S3_FAR *format, S3_U16 kind,
     S3_U16 i;
     S3_U32 rgb;
     S3_U8 value;
-    for (i = 0; i < (S3_U16)format->stride && i < sizeof(s3_dib_row); ++i) {
-        s3_dib_row[i] = 0;
+    const S3_U8 S3_FAR *in = s3_device_row;
+    S3_U8 S3_FAR *out = s3_dib_row;
+    s3_fmemset(s3_dib_row, 0, (S3_U16)format->stride < sizeof(s3_dib_row)
+                                  ? (S3_U16)format->stride : sizeof(s3_dib_row));
+    if (format->bits == 24 && kind != S3_TARGET_MEM1 && bp == 4) {
+        for (i = 0; i < count; ++i, in += 4, out += 3) {
+            out[0] = in[0];
+            out[1] = in[1];
+            out[2] = in[2];
+        }
+        return;
     }
     for (i = 0; i < count; ++i) {
         if (kind == S3_TARGET_MEM1) {

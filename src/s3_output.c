@@ -117,13 +117,55 @@ typedef struct S3_ROP_PLOT {
     S3_TARGET target;
     S3_U32 color;
     S3_U8 rop;
+    /* Last screen pixel plotted: neighbours step from its byte offset. */
+    int have_last;
+    S3_I16 last_x, last_y;
+    S3_U32 last_offset;
 } S3_ROP_PLOT;
+
+/* Screen address of (x, y). A line's next pixel is a neighbour of the
+   last one, so its offset is one add away and it is usually in the bank
+   already mapped. */
+static S3_U8 S3_FAR *s3_plot_screen(S3_ROP_PLOT S3_FAR *plot, S3_I16 x, S3_I16 y)
+{
+    S3_SURFACE S3_FAR *surface = plot->target.surface;
+    S3_I16 step_x = (S3_I16)(x - plot->last_x), step_y = (S3_I16)(y - plot->last_y);
+    S3_U32 offset;
+    if (surface->bank_bytes != 65536UL) return S3_TargetPixel(&plot->target, x, y);
+    if (plot->have_last && step_x >= -1 && step_x <= 1 && step_y >= -1 && step_y <= 1) {
+        offset = plot->last_offset;
+        if (step_x > 0) offset += plot->target.bytes_pixel;
+        else if (step_x < 0) offset -= plot->target.bytes_pixel;
+        if (step_y > 0) offset += surface->pitch;
+        else if (step_y < 0) offset -= surface->pitch;
+    } else {
+        offset = (S3_U32)(S3_U16)y * surface->pitch +
+                 (S3_U32)(S3_U16)x * plot->target.bytes_pixel;
+    }
+    plot->have_last = 1;
+    plot->last_x = x;
+    plot->last_y = y;
+    plot->last_offset = offset;
+    if ((offset >> 16) == surface->current_bank && surface->window != (S3_U8 S3_FAR *)0) {
+        return surface->window + (S3_U16)offset;
+    }
+    return S3_TargetPixel(&plot->target, x, y);
+}
 
 static int s3_rop_plot(void S3_FAR *context, S3_I16 x, S3_I16 y)
 {
     S3_ROP_PLOT S3_FAR *plot = (S3_ROP_PLOT S3_FAR *)context;
     S3_U8 pixel[4];
     S3_U16 bp = plot->target.bytes_pixel;
+    S3_U8 S3_FAR *at = plot->target.kind == S3_TARGET_SCREEN
+                           ? s3_plot_screen(plot, x, y)
+                           : S3_TargetPixel(&plot->target, x, y);
+    if (at != (S3_U8 S3_FAR *)0) {
+        S3_PixelStore(at, plot->rop == 0xF0 ? plot->color
+                                            : S3_Rop3Long(plot->rop, plot->color, 0,
+                                                          S3_PixelLoad(at, bp)), bp);
+        return 1;
+    }
     if (!S3_TargetReadRow(&plot->target, x, y, 1, pixel)) return 0;
     S3_PixelStore(pixel, S3_Rop3Long(plot->rop, plot->color, 0,
                                      S3_PixelLoad(pixel, bp)), bp);
@@ -142,6 +184,9 @@ int S3_OutputPolyline(void S3_FAR *destination, S3_U16 count,
         !S3_BindTarget(destination, &plot.target)) {
         return 0;
     }
+    plot.have_last = 0;
+    plot.last_x = plot.last_y = 0;
+    plot.last_offset = 0;
     plot.rop = S3_Rop2ToRop3(rop2);
     if (plot.rop == 0xFF && rop2 != 16) return 0;
     plot.color = S3_PhysicalToPixel(physical);

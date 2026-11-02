@@ -9,6 +9,17 @@
    is the pixel value itself in the direct-colour modes; at 8 bpp it also
    carries the 0xFF000000 index marker. */
 S3_U32 S3_PixelLoad(const S3_U8 S3_FAR *p, S3_U16 bytes_pixel);
+/* Inline forms for hot loops (x86 is little-endian, so a pixel is one
+   byte, word or dword). */
+#define S3_PIXEL_GET(p, bp) \
+    ((bp) == 4 ? *(const S3_U32 S3_FAR *)(p) \
+               : (bp) == 2 ? (S3_U32)*(const S3_U16 S3_FAR *)(p) : (S3_U32)*(p))
+#define S3_PIXEL_PUT(p, v, bp) \
+    do { \
+        if ((bp) == 4) *(S3_U32 S3_FAR *)(p) = (v); \
+        else if ((bp) == 2) *(S3_U16 S3_FAR *)(p) = (S3_U16)(v); \
+        else *(p) = (S3_U8)(v); \
+    } while (0)
 void S3_PixelStore(S3_U8 S3_FAR *p, S3_U32 pixel, S3_U16 bytes_pixel);
 S3_U32 S3_RGBToPixel(S3_U32 rgb);
 S3_U32 S3_PixelToRGB(S3_U32 pixel);

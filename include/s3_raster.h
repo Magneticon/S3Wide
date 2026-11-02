@@ -35,11 +35,20 @@ int S3_TargetReadRow(const S3_TARGET S3_FAR *target, S3_I16 x, S3_I16 y,
 int S3_TargetWriteRow(const S3_TARGET S3_FAR *target, S3_I16 x, S3_I16 y,
                       S3_U16 count, const S3_U8 S3_FAR *in);
 
+/* Address of colour pixel (x, y), mapping its bank on the screen; NULL for
+   monochrome targets (bit-packed) or when the bank cannot be mapped. */
+S3_U8 S3_FAR *S3_TargetPixel(const S3_TARGET S3_FAR *target, S3_I16 x, S3_I16 y);
+
 /* Ternary raster operation, bitwise: bit i of rop selects the minterm with
    P = bit 2, S = bit 1, D = bit 0 of i (PATCOPY F0, SRCCOPY CC, DSTINVERT 55). */
 S3_U8 S3_Rop3(S3_U8 rop, S3_U8 pattern, S3_U8 source, S3_U8 destination);
 S3_U32 S3_Rop3Long(S3_U8 rop, S3_U32 pattern, S3_U32 source,
                    S3_U32 destination);
+
+/* d = rop(p, s, d) bytewise over row buffers; p and s may be NULL when the
+   ROP does not use them. */
+void S3_RopBytes(S3_U8 rop, S3_U8 S3_FAR *d, const S3_U8 S3_FAR *p,
+                 const S3_U8 S3_FAR *s, S3_U16 bytes);
 
 /* Fill count pixels of row buffer out with pixel (bytes_pixel each). */
 void S3_FillPixels(S3_U8 S3_FAR *out, S3_U32 pixel, S3_U16 count,

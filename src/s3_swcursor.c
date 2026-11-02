@@ -140,7 +140,7 @@ int S3_SwCursorSetShape(S3_SWCURSOR S3_FAR *cursor,
     S3_U16 row, col, width_bytes, rows, cols;
 
     /* Task time: hold the cursor like a drawing call would. */
-    S3_SwCursorExclude(cursor);
+    S3_SwCursorExclude(cursor, (const S3_RECT16 S3_FAR *)0);
     cursor->shape_valid = 0;
     if (shape == (const S3_CURSORSHAPE16 S3_FAR *)0) {
         S3_SwCursorUnexclude(cursor);
@@ -189,11 +189,18 @@ void S3_SwCursorCheck(S3_SWCURSOR S3_FAR *cursor)
     s3_leave(cursor);
 }
 
-void S3_SwCursorExclude(S3_SWCURSOR S3_FAR *cursor)
+void S3_SwCursorExclude(S3_SWCURSOR S3_FAR *cursor,
+                        const S3_RECT16 S3_FAR *bounds)
 {
     S3_U16 flags = s3_irq_save();
     ++cursor->busy;
     s3_irq_restore(flags);
+    /* Held: an interrupt-time move can no longer redraw it elsewhere. */
+    if (bounds != (const S3_RECT16 S3_FAR *)0 && cursor->drawn &&
+        (bounds->right <= cursor->drawn_left || bounds->left >= cursor->drawn_right ||
+         bounds->bottom <= cursor->drawn_top || bounds->top >= cursor->drawn_bottom)) {
+        return;
+    }
     s3_erase(cursor);
 }
 

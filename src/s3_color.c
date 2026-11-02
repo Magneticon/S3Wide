@@ -78,25 +78,12 @@ int S3_ColorIndexToRGB(S3_U8 index, S3_U32 S3_FAR *rgb_out)
 
 S3_U32 S3_PixelLoad(const S3_U8 S3_FAR *p, S3_U16 bytes_pixel)
 {
-    switch (bytes_pixel) {
-    case 2:
-        return (S3_U32)p[0] | ((S3_U32)p[1] << 8);
-    case 4:
-        return (S3_U32)p[0] | ((S3_U32)p[1] << 8) | ((S3_U32)p[2] << 16) |
-               ((S3_U32)p[3] << 24);
-    default:
-        return p[0];
-    }
+    return S3_PIXEL_GET(p, bytes_pixel);
 }
 
 void S3_PixelStore(S3_U8 S3_FAR *p, S3_U32 pixel, S3_U16 bytes_pixel)
 {
-    p[0] = (S3_U8)pixel;
-    if (bytes_pixel >= 2) p[1] = (S3_U8)(pixel >> 8);
-    if (bytes_pixel == 4) {
-        p[2] = (S3_U8)(pixel >> 16);
-        p[3] = (S3_U8)(pixel >> 24);
-    }
+    S3_PIXEL_PUT(p, pixel, bytes_pixel);
 }
 
 S3_U32 S3_RGBToPixel(S3_U32 rgb)

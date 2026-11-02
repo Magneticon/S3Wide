@@ -2254,6 +2254,72 @@ static void test_system_colors_exact(void)
 }
 
 /* 16 and 32 bpp: colour conversion, fills, mono expansion, DIBs, cursor. */
+/* Screen polylines in 64 KiB banks step their byte offset from pixel to
+   pixel; lines that cross a bank boundary land exactly where the DDA says. */
+static void test_polyline_64k_banks(void)
+{
+    static S3_U8 vram[5 * 65536UL];
+    LARGE_BANK_CONTEXT context;
+    S3_SURFACE surface;
+    S3_PDEV pdev;
+    S3_POINT16 diagonal[2] = {{380, 38}, {390, 48}};
+    S3_POINT16 vertical[2] = {{10, 0}, {10, 100}};
+    S3_POINT16 shallow[2] = {{0, 39}, {399, 42}};
+    S3_U32 i, set = 0;
+    S3_I16 k;
+
+    memset(vram, 0, sizeof(vram));
+    context.vram = vram;
+    context.framebuffer_bytes = 400UL * 4 * 200;
+    context.bank_bytes = 65536UL;
+    context.calls = 0;
+    CHECK(S3_ModeSetVBE(&s3_mode, 400, 200, 32, 1600, 0x112, 0xE0000000UL));
+    CHECK(S3_SurfaceInit(&surface, 400, 200, 1600, context.framebuffer_bytes,
+                         65536UL, 65536UL, vram, &context, test_map_large_bank));
+    surface.bytes_pixel = 4;
+    CHECK(S3_InitializePDEV(&pdev));
+    pdev.surface_state = &surface;
+    CHECK(S3_OutputPolyline(&pdev, 2, diagonal, 0x00AABBCCUL, 13, (S3_RECT16 *)0));
+    CHECK(S3_OutputPolyline(&pdev, 2, vertical, 0x00AABBCCUL, 13, (S3_RECT16 *)0));
+    for (k = 0; k < 10; ++k) {
+        CHECK(S3_PixelLoad(vram + (S3_U32)(38 + k) * 1600 + (380 + k) * 4, 4) == 0x00AABBCCUL);
+    }
+    for (k = 0; k < 100; ++k) {
+        CHECK(S3_PixelLoad(vram + (S3_U32)k * 1600 + 10 * 4, 4) == 0x00AABBCCUL);
+    }
+    for (i = 0; i < context.framebuffer_bytes; i += 4) set += S3_PixelLoad(vram + i, 4) != 0;
+    CHECK(set == 110);
+    /* XORPEN twice along a shallow line through two banks restores it. */
+    CHECK(S3_OutputPolyline(&pdev, 2, shallow, 0x00FFFFFFUL, 7, (S3_RECT16 *)0));
+    CHECK(S3_PixelLoad(vram + 39UL * 1600, 4) == 0x00FFFFFFUL);
+    CHECK(S3_OutputPolyline(&pdev, 2, shallow, 0x00FFFFFFUL, 7, (S3_RECT16 *)0));
+    set = 0;
+    for (i = 0; i < context.framebuffer_bytes; i += 4) set += S3_PixelLoad(vram + i, 4) != 0;
+    CHECK(set == 110);
+    S3_ModeDefault(&s3_mode);
+}
+
+/* The row ROP (words, unrolled cases) matches the per-value ROP3 for every
+   code, including an odd trailing byte and NULL unused operands. */
+static void test_rop_bytes(void)
+{
+    S3_U8 p[7], s[7], d[7], expect[7];
+    unsigned rop, i;
+    for (rop = 0; rop < 256; ++rop) {
+        for (i = 0; i < 7; ++i) {
+            p[i] = (S3_U8)(0x5C * (i + 1) + rop);
+            s[i] = (S3_U8)(0x3B * (i + 3) ^ rop);
+            d[i] = (S3_U8)(0xA7 * (i + 5) + (rop >> 2));
+            expect[i] = S3_Rop3((S3_U8)rop, p[i], s[i], d[i]);
+        }
+        S3_RopBytes((S3_U8)rop, d, p, s, 7);
+        CHECK(memcmp(d, expect, 7) == 0);
+    }
+    for (i = 0; i < 7; ++i) d[i] = (S3_U8)(i * 37);
+    S3_RopBytes(0x55, d, (const S3_U8 *)0, (const S3_U8 *)0, 7);
+    for (i = 0; i < 7; ++i) CHECK(d[i] == (S3_U8)~(i * 37));
+}
+
 static void test_direct_colour_depths(void)
 {
     BANK_TEST_CONTEXT context;
@@ -2383,12 +2449,28 @@ static void test_direct_colour_depths(void)
     CHECK(S3_SwCursorSetShape(&cursor, &shape.header));
     S3_SwCursorMove(&cursor, 2, 4);
     CHECK(S3_PixelLoad(p, 4) == 0xFFFFFFFFUL);
-    S3_SwCursorExclude(&cursor);
+    S3_SwCursorExclude(&cursor, (const S3_RECT16 *)0);
     CHECK(S3_PixelLoad(p, 4) == 0x00123456UL);
     S3_SwCursorMove(&cursor, 3, 4);           /* deferred while excluded */
     CHECK(S3_PixelLoad(p + 4, 4) != 0xFFFFFFFFUL);
     S3_SwCursorUnexclude(&cursor);
     CHECK(S3_PixelLoad(p, 4) == 0x00123456UL && S3_PixelLoad(p + 4, 4) == 0xFFFFFFFFUL);
+    {
+        /* Drawing elsewhere keeps the cursor up but still defers moves;
+           drawing over it erases it. Drawn rectangle: (3,4)-(6,5). */
+        S3_RECT16 away = {0, 0, 3, 4}, over = {5, 4, 6, 5};
+        S3_SwCursorExclude(&cursor, &away);
+        CHECK(S3_PixelLoad(p + 4, 4) == 0xFFFFFFFFUL);
+        S3_SwCursorMove(&cursor, 2, 4);
+        CHECK(S3_PixelLoad(p + 4, 4) == 0xFFFFFFFFUL && S3_PixelLoad(p, 4) == 0x00123456UL);
+        S3_SwCursorUnexclude(&cursor);
+        CHECK(S3_PixelLoad(p, 4) == 0xFFFFFFFFUL && S3_PixelLoad(p + 4, 4) != 0xFFFFFFFFUL);
+        S3_SwCursorMove(&cursor, 3, 4);
+        S3_SwCursorExclude(&cursor, &over);
+        CHECK(S3_PixelLoad(p + 4, 4) != 0xFFFFFFFFUL);
+        S3_SwCursorUnexclude(&cursor);
+        CHECK(S3_PixelLoad(p + 4, 4) == 0xFFFFFFFFUL);
+    }
 
     S3_ModeDefault(&s3_mode);
 }
@@ -2402,6 +2484,8 @@ int main(void)
     test_realized_pen_and_output_polyline();
     test_realized_brushes();
     test_raster_rop3_and_targets();
+    test_rop_bytes();
+    test_polyline_64k_banks();
     test_direct_colour_depths();
     test_dib_conversions();
     test_raster_text();

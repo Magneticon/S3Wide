@@ -118,7 +118,7 @@ static void s3_swcursor_stop(void)
 {
     if (!s3_swcursor_active) return;
     /* Hide it and keep it held so interrupt-time calls draw nothing. */
-    S3_SwCursorExclude(&s3_swcursor);
+    S3_SwCursorExclude(&s3_swcursor, (const S3_RECT16 S3_FAR *)0);
     s3_swcursor_active = 0;
     s3_dpmi_free_selector(s3_cursor_selector);
     s3_cursor_selector = 0;
@@ -145,16 +145,39 @@ void S3_DisplaySwCursorCheck(void)
     if (s3_swcursor_active) S3_SwCursorCheck(&s3_swcursor);
 }
 
-int S3_DisplayExclude(const void S3_FAR *device, const void S3_FAR *other)
+static int s3_is_display(const void S3_FAR *device)
 {
+    return device != (const void S3_FAR *)0 &&
+           ((const S3_PDEV S3_FAR *)device)->pdType == S3_PDEV_DISPLAY;
+}
+
+int S3_DisplayExclude(const void S3_FAR *device, const S3_RECT16 S3_FAR *rect,
+                      const void S3_FAR *other, const S3_RECT16 S3_FAR *other_rect)
+{
+    S3_RECT16 bounds;
+    const S3_RECT16 S3_FAR *use;
+    int on_device, on_other;
+
     if (!s3_swcursor_active) return 0;
-    if ((device == (const void S3_FAR *)0 ||
-         ((const S3_PDEV S3_FAR *)device)->pdType != S3_PDEV_DISPLAY) &&
-        (other == (const void S3_FAR *)0 ||
-         ((const S3_PDEV S3_FAR *)other)->pdType != S3_PDEV_DISPLAY)) {
-        return 0;
+    on_device = s3_is_display(device);
+    on_other = s3_is_display(other);
+    if (!on_device && !on_other) return 0;
+    if (on_device && on_other) {
+        use = (const S3_RECT16 S3_FAR *)0;
+        if (rect != (const S3_RECT16 S3_FAR *)0 &&
+            other_rect != (const S3_RECT16 S3_FAR *)0) {
+            bounds.left = rect->left < other_rect->left ? rect->left : other_rect->left;
+            bounds.top = rect->top < other_rect->top ? rect->top : other_rect->top;
+            bounds.right = rect->right > other_rect->right ? rect->right
+                                                           : other_rect->right;
+            bounds.bottom = rect->bottom > other_rect->bottom ? rect->bottom
+                                                              : other_rect->bottom;
+            use = &bounds;
+        }
+    } else {
+        use = on_device ? rect : other_rect;
     }
-    S3_SwCursorExclude(&s3_swcursor);
+    S3_SwCursorExclude(&s3_swcursor, use);
     return 1;
 }
 
@@ -163,10 +186,13 @@ void S3_DisplayUnexclude(int excluded)
     if (excluded && s3_swcursor_active) S3_SwCursorUnexclude(&s3_swcursor);
 }
 #else
-int S3_DisplayExclude(const void S3_FAR *device, const void S3_FAR *other)
+int S3_DisplayExclude(const void S3_FAR *device, const S3_RECT16 S3_FAR *rect,
+                      const void S3_FAR *other, const S3_RECT16 S3_FAR *other_rect)
 {
     (void)device;
+    (void)rect;
     (void)other;
+    (void)other_rect;
     return 0;
 }
 
@@ -174,7 +200,28 @@ void S3_DisplayUnexclude(int excluded)
 {
     (void)excluded;
 }
+
+int S3_DisplaySwCursorActive(void)
+{
+    return 0;
+}
 #endif
+
+static S3_I16 s3_clamp16(S3_I32 value)
+{
+    if (value < -32768L) return (S3_I16)-32768;
+    if (value > 32767L) return 32767;
+    return (S3_I16)value;
+}
+
+void S3_DisplaySetRect(S3_RECT16 S3_FAR *rect, S3_I32 left, S3_I32 top,
+                       S3_I32 right, S3_I32 bottom)
+{
+    rect->left = s3_clamp16(left);
+    rect->top = s3_clamp16(top);
+    rect->right = s3_clamp16(right);
+    rect->bottom = s3_clamp16(bottom);
+}
 
 #if !defined(S3_HOST_TEST)
 /* Program 1280x720x8 through direct VGA/S3 port I/O and map the 64 KiB A000

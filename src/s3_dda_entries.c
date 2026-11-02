@@ -79,7 +79,40 @@ S3_U32 S3_FAR S3_PASCAL ExtTextOut(void S3_FAR *device, S3_I16 x, S3_I16 y,
         }
     }
 #endif
-    excluded = S3_DisplayExclude(device, (void S3_FAR *)0);
+    if (count < 0) {
+        excluded = 0; /* extent query: draws nothing */
+    } else {
+        /* The text cells (measured like an extent query) and the opaque
+           rectangle are all this call can touch. */
+        S3_RECT16 bounds;
+        const S3_RECT16 S3_FAR *use = (const S3_RECT16 S3_FAR *)0;
+        const S3_RECT16 S3_FAR *opaque = (const S3_RECT16 S3_FAR *)opaque_rect;
+        S3_U32 extent = count > 0
+            ? S3_TextOut(device, x, y, (const S3_RECT16 S3_FAR *)0,
+                         (const S3_U8 S3_FAR *)text, (S3_I16)-count, font_info,
+                         (S3_DRAWMODE16 S3_FAR *)draw_mode, char_widths,
+                         (const S3_RECT16 S3_FAR *)0, 0)
+            : 0;
+        if (extent != 0) {
+            S3_I32 left = x, top = y;
+            S3_I32 right = (S3_I32)x + (S3_I16)(S3_U16)extent;
+            S3_I32 bottom = (S3_I32)y + (S3_U16)(extent >> 16);
+            if (right < left) { S3_I32 t = left; left = right; right = t; }
+            if ((options & S3_ETO_OPAQUE) && opaque != (const S3_RECT16 S3_FAR *)0) {
+                if (opaque->left < left) left = opaque->left;
+                if (opaque->top < top) top = opaque->top;
+                if (opaque->right > right) right = opaque->right;
+                if (opaque->bottom > bottom) bottom = opaque->bottom;
+            }
+            S3_DisplaySetRect(&bounds, left, top, right, bottom);
+            use = &bounds;
+        } else if (count == 0 && (options & S3_ETO_OPAQUE) &&
+                   opaque != (const S3_RECT16 S3_FAR *)0) {
+            use = opaque;
+        }
+        excluded = S3_DisplayExclude(device, use, (void S3_FAR *)0,
+                                     (const S3_RECT16 S3_FAR *)0);
+    }
     result = S3_TextOut(device, x, y, (const S3_RECT16 S3_FAR *)clip_rect,
                         (const S3_U8 S3_FAR *)text, count, font_info,
                         (S3_DRAWMODE16 S3_FAR *)draw_mode, char_widths,
@@ -180,7 +213,12 @@ S3_U16 S3_FAR S3_PASCAL FastBorder(S3_RECT16 S3_FAR *rect, S3_U16 h_border,
     hw = (S3_I16)h_border;
     vw = (S3_I16)v_border;
     S3_TRACE_EVENT("FastBorder", (S3_U16)hw, (S3_U16)vw);
-    excluded = S3_DisplayExclude(device, (void S3_FAR *)0);
+    {
+        S3_RECT16 bounds;
+        S3_DisplaySetRect(&bounds, l, t, r, b);
+        excluded = S3_DisplayExclude(device, &bounds, (void S3_FAR *)0,
+                                     (const S3_RECT16 S3_FAR *)0);
+    }
     ok = s3_border_strip(device, l, t, r, (S3_I16)(t + vw), rop, pbrush, mode, clip) &&
          s3_border_strip(device, l, (S3_I16)(b - vw), r, b, rop, pbrush, mode, clip) &&
          s3_border_strip(device, l, (S3_I16)(t + vw), (S3_I16)(l + hw),
@@ -265,10 +303,24 @@ S3_U16 S3_FAR S3_PASCAL SetCursor(void S3_FAR *cursor_shape)
     return 1;
 }
 
+#if !defined(S3_HOST_TEST)
+/* The driver is compiled for the 386 (-3), so its code may use the upper
+   halves of 32-bit registers, which 16-bit interrupt handlers do not save.
+   Interrupt-time entries hand all of them back unchanged to whatever they
+   interrupted, which may be this driver's own drawing code. */
+void s3_push32(void);
+#pragma aux s3_push32 = 0x66 0x60;  /* pushad */
+void s3_pop32(void);
+#pragma aux s3_pop32 = 0x66 0x61;   /* popad */
+#else
+#define s3_push32()
+#define s3_pop32()
+#endif
+
 /* MoveCursor and CheckCursor run at mouse and timer interrupt time: they
    must not trace (file I/O would re-enter DOS). The hardware cursor needs
    no redraw; CheckCursor only redraws a deferred software cursor. */
-void S3_FAR S3_PASCAL MoveCursor(S3_I16 x, S3_I16 y)
+static void s3_move_cursor(S3_I16 x, S3_I16 y)
 {
     s3_cursor_x = x;
     s3_cursor_y = y;
@@ -281,9 +333,23 @@ void S3_FAR S3_PASCAL MoveCursor(S3_I16 x, S3_I16 y)
     }
 }
 
-void S3_FAR S3_PASCAL CheckCursor(void)
+void S3_FAR S3_PASCAL MoveCursor(S3_I16 x, S3_I16 y)
+{
+    s3_push32();
+    s3_move_cursor(x, y);
+    s3_pop32();
+}
+
+static void s3_check_cursor(void)
 {
     if (s3_mode.backend != S3_BACKEND_S3) S3_DisplaySwCursorCheck();
+}
+
+void S3_FAR S3_PASCAL CheckCursor(void)
+{
+    s3_push32();
+    s3_check_cursor();
+    s3_pop32();
 }
 
 void S3_FAR S3_PASCAL UserRepaintDisable(S3_U16 disable)
