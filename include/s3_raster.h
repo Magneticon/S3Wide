@@ -54,6 +54,30 @@ void S3_RopBytes(S3_U8 rop, S3_U8 S3_FAR *d, const S3_U8 S3_FAR *p,
 void S3_FillPixels(S3_U8 S3_FAR *out, S3_U32 pixel, S3_U16 count,
                    S3_U16 bytes_pixel);
 
+/* Source column for each destination column of a stretch: map[i] is the
+   offset into the source span for destination column first + i of a
+   destination extent dst_ext drawn from a source extent src_ext
+   (the pixel GDI's own stretching picks, so both give the same image). */
+void S3_StretchMap(S3_U16 S3_FAR *map, S3_U16 first, S3_U16 count,
+                   S3_U16 src_ext, S3_U16 dst_ext);
+/* Source row (from the top of the source rectangle) for destination row
+   v (from its top). */
+S3_U16 S3_StretchRow(S3_U16 v, S3_U16 src_ext, S3_U16 dst_ext);
+/* out[i] = in[map[i]] for count pixels of bytes_pixel bytes. */
+void S3_StretchRowPixels(S3_U8 S3_FAR *out, const S3_U8 S3_FAR *in,
+                         const S3_U16 S3_FAR *map, S3_U16 count,
+                         S3_U16 bytes_pixel);
+
+/* StretchBlt core: SRCCOPY from a colour source (screen or bitmap in the
+   display format) to a colour destination, enlarging or keeping each
+   extent (no row is dropped, so every stretch mode gives this result),
+   source and destination different surfaces. Returns 1 when drawn, 0 on
+   error, -1 when GDI should emulate the call instead. */
+int S3_RasterStretchBlt(void S3_FAR *destination, S3_I16 dx, S3_I16 dy,
+                        S3_I16 dw, S3_I16 dh, void S3_FAR *source,
+                        S3_I16 sx, S3_I16 sy, S3_I16 sw, S3_I16 sh,
+                        S3_U32 rop3, const S3_RECT16 S3_FAR *clip);
+
 /* General BitBlt: any ROP3 between brush, source and destination, with
    GDI's monochrome/colour conversions (mono 1 = background colour, 0 = text
    colour; colour -> mono is 1 where the pixel equals the background colour).

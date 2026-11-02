@@ -250,6 +250,8 @@ typedef char S3_ASSERT_FRAMEBUFFER_BYTES[(S3_FRAMEBUFFER_BYTES == 921600UL) ? 1 
 #define S3_RC_GDI20_OUTPUT  0x0010
 #define S3_RC_DI_BITMAP     0x0080
 #define S3_RC_DIBTODEV      0x0200
+#define S3_RC_STRETCHBLT    0x0800
+#define S3_RC_STRETCHDIB    0x2000
 #define S3_DDA_NOT_SUPPORTED 0xFFFFU
 
 int S3_BuildGDIInfo(S3_GDIINFO S3_FAR *info);
@@ -305,5 +307,23 @@ S3_U16 S3_FAR S3_PASCAL SetDIBitsToDevice(
                                S3_U8 S3_FAR *dib_bits,
                                S3_BITMAPINFO16 S3_FAR *bitmap_info,
                                S3_I16 S3_FAR *translate);
+/* Stretching (ordinals 27 and 28). A negative result asks GDI to emulate
+   the call, which the driver does for shrinking, mirroring, raster
+   operations other than SRCCOPY and formats it does not handle. */
+S3_I16 S3_FAR S3_PASCAL StretchBlt(void S3_FAR *destination,
+                                   S3_I16 dx, S3_I16 dy, S3_I16 dw, S3_I16 dh,
+                                   void S3_FAR *source,
+                                   S3_I16 sx, S3_I16 sy, S3_I16 sw, S3_I16 sh,
+                                   S3_U32 rop3, void S3_FAR *brush,
+                                   void S3_FAR *draw_mode,
+                                   S3_RECT16 S3_FAR *clip_rect);
+S3_I16 S3_FAR S3_PASCAL StretchDIBits(void S3_FAR *destination, S3_U16 get,
+                                      S3_I16 dx, S3_I16 dy, S3_I16 dw, S3_I16 dh,
+                                      S3_I16 sx, S3_I16 sy, S3_I16 sw, S3_I16 sh,
+                                      S3_U8 S3_FAR *bits,
+                                      S3_BITMAPINFO16 S3_FAR *bitmap_info,
+                                      S3_I16 S3_FAR *translate, S3_U32 rop3,
+                                      void S3_FAR *brush, void S3_FAR *draw_mode,
+                                      S3_RECT16 S3_FAR *clip_rect);
 
 #endif

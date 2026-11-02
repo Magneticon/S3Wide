@@ -125,8 +125,12 @@ Pictures and video
 Windows bitmaps (BMP/DIB) at 1, 4, 8 and 24 bits per pixel are drawn at
 every depth, including RLE-compressed 4- and 8-bit bitmaps. PNG, JPEG and
 GIF need a viewer program that understands them; Windows 3.1 itself does
-not. Video (AVI) needs Microsoft Video for Windows; it draws through the
-normal bitmap calls (no video overlay). In 256-colour mode the driver
+not. Video (AVI) needs Microsoft Video for Windows. Play it in a window
+(Media Player, Device, Configure: Window) and maximize or size the window:
+the driver stretches the frames itself in your desktop mode and colours.
+Video for Windows' "Full Screen" option switches to a 4:3 320x240 VGA mode
+in 256 colours, bypassing the driver; a 16:9 film is then letterboxed
+inside a 4:3 picture. In 256-colour mode the driver
 uses a fixed colour set (no palette changes), so photos look coarser
 than at 16 or 32 bpp.
 

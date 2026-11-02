@@ -376,7 +376,8 @@ static void test_gdi_contract(void)
     CHECK(info.dpBitsPixel == 8 && info.dpPlanes == 1);
     CHECK(info.dpDEVICEsize == sizeof(S3_PDEV));
     CHECK(info.dpRaster == (S3_RC_BITBLT | S3_RC_BITMAP64 | S3_RC_GDI20_OUTPUT |
-                            S3_RC_DI_BITMAP | S3_RC_DIBTODEV));
+                            S3_RC_DI_BITMAP | S3_RC_DIBTODEV | S3_RC_STRETCHBLT |
+                            S3_RC_STRETCHDIB));
     CHECK(info.dpText == (S3_TC_CP_STROKE | S3_TC_RA_ABLE));
     CHECK(info.dpPolygonals == S3_PC_SCANLINE && info.dpLines == S3_LC_POLYLINE);
     CHECK(info.dpClip == S3_CP_RECTANGLE);
@@ -2641,6 +2642,120 @@ static void test_wide_dibs(void)
     S3_ModeDefault(&s3_mode);
 }
 
+/* Native stretching: nearest-pixel maps, a 2x enlargement between
+   bitmaps, a DIB source rectangle counted from the DIB's bottom, clipping,
+   and the cases handed back to GDI (-1). 32 bpp. */
+static void test_stretch(void)
+{
+    static S3_U8 src_bits[4 * 4 * 3];
+    static S3_U8 dst_bits[8 * 4 * 7];
+    struct {
+        S3_BITMAPINFOHEADER16 header;
+        S3_RGBQUAD16 colors[256];
+    } info;
+    S3_U8 dib8[4 * 3];           /* 4x3 8-bpp DIB, stride 4 */
+    S3_BITMAP16 src, dst;
+    S3_U16 map[8];
+    S3_RECT16 clip;
+    unsigned x, y;
+
+    /* Sequences measured from GDI's own emulation on WfW 3.11. */
+    {
+        static const S3_U16 x7_10[10] = {0, 0, 1, 2, 3, 3, 4, 5, 5, 6};
+        static const S3_U16 x3_8[8] = {0, 0, 0, 1, 1, 1, 2, 2};
+        static const S3_U16 x40_103[16] = {0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 6};
+        static const S3_U16 y3_8[8] = {0, 0, 0, 1, 1, 2, 2, 2};
+        static const S3_U16 y30_70[16] = {0, 0, 1, 1, 1, 2, 2, 3, 3, 4, 4, 4, 5, 5, 6, 6};
+        static const S3_U16 y10_45[14] = {0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3};
+        S3_U16 big[103];
+        S3_StretchMap(map, 0, 8, 7, 10);
+        for (x = 0; x < 8; ++x) CHECK(map[x] == x7_10[x]);
+        S3_StretchMap(map, 0, 8, 3, 8);
+        for (x = 0; x < 8; ++x) CHECK(map[x] == x3_8[x]);
+        S3_StretchMap(big, 0, 103, 40, 103);
+        for (x = 0; x < 16; ++x) CHECK(big[x] == x40_103[x]);
+        CHECK(big[102] == 39);
+        S3_StretchMap(map, 3, 2, 7, 10);          /* a clipped start */
+        CHECK(map[0] == 2 && map[1] == 3);
+        for (y = 0; y < 8; ++y) CHECK(S3_StretchRow((S3_U16)y, 3, 8) == y3_8[y]);
+        for (y = 0; y < 16; ++y) CHECK(S3_StretchRow((S3_U16)y, 30, 70) == y30_70[y]);
+        for (y = 0; y < 14; ++y) CHECK(S3_StretchRow((S3_U16)y, 10, 45) == y10_45[y]);
+        CHECK(S3_StretchRow(0, 1, 5) == 0 && S3_StretchRow(4, 1, 5) == 0);
+    }
+
+    CHECK(S3_ModeSetVBE(&s3_mode, 640, 480, 32, 2560, 0x112, 0xE0000000UL));
+    memset(&src, 0, sizeof(src));
+    src.bmWidth = 4;
+    src.bmHeight = 3;
+    src.bmWidthBytes = 16;
+    src.bmPlanes = 1;
+    src.bmBitsPixel = 32;
+    src.bmBits = src_bits;
+    for (y = 0; y < 3; ++y)
+        for (x = 0; x < 4; ++x) S3_PixelStore(src_bits + y * 16 + x * 4, y * 16 + x, 4);
+    dst = src;
+    dst.bmWidth = 8;
+    dst.bmHeight = 7;
+    dst.bmWidthBytes = 32;
+    dst.bmBits = dst_bits;
+
+    /* Source (1,1) 2x2 -> destination (1,1) 4x4: each source pixel 2x2. */
+    memset(dst_bits, 0xEE, sizeof(dst_bits));
+    CHECK(S3_RasterStretchBlt(&dst, 1, 1, 4, 4, &src, 1, 1, 2, 2, 0x00CC0020UL,
+                              (S3_RECT16 *)0) == 1);
+    for (y = 0; y < 4; ++y)
+        for (x = 0; x < 4; ++x)
+            CHECK(S3_PixelLoad(dst_bits + (1 + y) * 32 + (1 + x) * 4, 4) ==
+                  (1 + y / 2) * 16 + (1 + x / 2));
+    CHECK(S3_PixelLoad(dst_bits, 4) == 0xEEEEEEEEUL);
+    CHECK(S3_PixelLoad(dst_bits + 5 * 32 + 5 * 4, 4) == 0xEEEEEEEEUL);
+    /* Clipped to column 2 and rows 1-2. */
+    memset(dst_bits, 0xEE, sizeof(dst_bits));
+    clip.left = 2; clip.top = 0; clip.right = 3; clip.bottom = 3;
+    CHECK(S3_RasterStretchBlt(&dst, 1, 1, 4, 4, &src, 1, 1, 2, 2, 0x00CC0020UL,
+                              &clip) == 1);
+    CHECK(S3_PixelLoad(dst_bits + 1 * 32 + 2 * 4, 4) == 1 * 16 + 1);
+    CHECK(S3_PixelLoad(dst_bits + 1 * 32 + 1 * 4, 4) == 0xEEEEEEEEUL);
+    CHECK(S3_PixelLoad(dst_bits + 3 * 32 + 2 * 4, 4) == 0xEEEEEEEEUL);
+    /* Handed back to GDI: shrinking, other ROPs, same bitmap. */
+    CHECK(S3_RasterStretchBlt(&dst, 0, 0, 1, 1, &src, 0, 0, 2, 2, 0x00CC0020UL,
+                              (S3_RECT16 *)0) == -1);
+    CHECK(S3_RasterStretchBlt(&dst, 0, 0, 4, 4, &src, 0, 0, 2, 2, 0x00660046UL,
+                              (S3_RECT16 *)0) == -1);
+    CHECK(S3_RasterStretchBlt(&src, 0, 0, 4, 2, &src, 0, 0, 2, 1, 0x00CC0020UL,
+                              (S3_RECT16 *)0) == -1);
+
+    /* DIB: 4x3, index = 16 * scan + column (scan 0 is the bottom row).
+       Source rectangle x 1, y 1 (from the bottom), 2x2 covers scans 1-2,
+       i.e. the DIB's top two rows; drawn 2x into the bitmap at (0, 0). */
+    memset(&info, 0, sizeof(info));
+    info.header.biSize = sizeof(S3_BITMAPINFOHEADER16);
+    info.header.biWidth = 4;
+    info.header.biHeight = 3;
+    info.header.biPlanes = 1;
+    info.header.biBitCount = 8;
+    for (x = 0; x < 256; ++x) info.colors[x].rgbBlue = (S3_U8)x;  /* pixel = index */
+    for (y = 0; y < 3; ++y)
+        for (x = 0; x < 4; ++x) dib8[y * 4 + x] = (S3_U8)(y * 16 + x);
+    memset(dst_bits, 0xEE, sizeof(dst_bits));
+    CHECK(S3_DibStretchToDevice(&dst, 0, 0, 4, 4, 1, 1, 2, 2, dib8,
+                                (S3_BITMAPINFO16 *)&info, 0x00CC0020UL,
+                                (S3_RECT16 *)0) == 2);
+    for (y = 0; y < 4; ++y)
+        for (x = 0; x < 4; ++x)
+            /* destination row 0-1: top source row = scan 2; rows 2-3: scan 1 */
+            CHECK(S3_PixelLoad(dst_bits + y * 32 + x * 4, 4) ==
+                  (S3_U32)((y < 2 ? 2 : 1) * 16 + 1 + x / 2));
+    CHECK(S3_PixelLoad(dst_bits + 4 * 32, 4) == 0xEEEEEEEEUL);
+    CHECK(S3_DibStretchToDevice(&dst, 0, 0, 1, 1, 0, 0, 2, 2, dib8,
+                                (S3_BITMAPINFO16 *)&info, 0x00CC0020UL,
+                                (S3_RECT16 *)0) == -1);
+    CHECK(S3_DibStretchToDevice(&dst, 0, 0, 4, 4, 3, 0, 2, 2, dib8,
+                                (S3_BITMAPINFO16 *)&info, 0x00CC0020UL,
+                                (S3_RECT16 *)0) == -1);  /* outside the DIB */
+    S3_ModeDefault(&s3_mode);
+}
+
 /* The row ROP (words, unrolled cases) matches the per-value ROP3 for every
    code, including an odd trailing byte and NULL unused operands. */
 static void test_rop_bytes(void)
@@ -2827,6 +2942,7 @@ int main(void)
     test_realized_brushes();
     test_raster_rop3_and_targets();
     test_rop_bytes();
+    test_stretch();
     test_wide_dibs();
     test_mono_pattern_colours();
     test_vbe_mode_score();

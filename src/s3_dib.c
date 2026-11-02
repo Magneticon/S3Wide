@@ -15,6 +15,7 @@ extern void S3_FAR S3_PASCAL __AHINCR(void);
 static S3_U8 S3_FAR_DATA s3_dib_row[S3_ROW_BYTES_MAX];
 static S3_U8 S3_FAR_DATA s3_device_row[S3_ROW_BYTES_MAX];
 static S3_U8 S3_FAR_DATA s3_index_row[S3_DIB_ROW_MAX];
+static S3_U16 S3_FAR_DATA s3_dib_map[S3_DIB_ROW_MAX];
 static S3_U32 s3_table_pixel[256];
 static S3_U8 s3_table_mono[256];
 
@@ -523,6 +524,68 @@ S3_U16 S3_DibBitmapBits(void S3_FAR *bitmap, S3_U16 get, S3_U16 start,
         ++done;
     }
     return done;
+}
+
+S3_I16 S3_DibStretchToDevice(void S3_FAR *device, S3_I16 dx, S3_I16 dy,
+                             S3_I16 dw, S3_I16 dh, S3_I16 sx, S3_I16 sy,
+                             S3_I16 sw, S3_I16 sh, const S3_U8 S3_FAR *bits,
+                             const S3_BITMAPINFO16 S3_FAR *info, S3_U32 rop3,
+                             const S3_RECT16 S3_FAR *clip)
+{
+    S3_TARGET target;
+    S3_DIB_FORMAT format;
+    S3_I32 left, top, right, bottom;
+    S3_U32 byte0, bytes;
+    S3_U16 count, row, last_row = 0xFFFFU, scan, phase;
+    S3_I16 y;
+
+    if ((S3_U8)(rop3 >> 16) != 0xCC || bits == (const S3_U8 S3_FAR *)0 ||
+        dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0 || dw < sw || dh < sh ||
+        sw > S3_DIB_ROW_MAX || !S3_DibFormat(info, &format) ||
+        format.compression != S3_BI_RGB || !S3_BindTarget(device, &target) ||
+        sx < 0 || sy < 0 || (S3_I32)sx + sw > (S3_I32)format.width ||
+        (S3_I32)sy + sh > (S3_I32)format.height) {
+        return -1;
+    }
+    left = dx;
+    top = dy;
+    right = (S3_I32)dx + dw;
+    bottom = (S3_I32)dy + dh;
+    if (left < 0) left = 0;
+    if (top < 0) top = 0;
+    if (right > (S3_I32)target.width) right = target.width;
+    if (bottom > (S3_I32)target.height) bottom = target.height;
+    if (clip != (const S3_RECT16 S3_FAR *)0) {
+        if (clip->left > left) left = clip->left;
+        if (clip->top > top) top = clip->top;
+        if (clip->right < right) right = clip->right;
+        if (clip->bottom < bottom) bottom = clip->bottom;
+    }
+    if (left >= right || top >= bottom) return sh;
+    count = (S3_U16)(right - left);
+    S3_StretchMap(s3_dib_map, (S3_U16)(left - dx), count, (S3_U16)sw, (S3_U16)dw);
+    s3_build_tables(info, &format);
+    /* The source span's bytes; a 1- or 4-bpp span may start inside a byte. */
+    byte0 = (S3_U32)(S3_U16)sx * format.bits / 8U;
+    bytes = ((S3_U32)((S3_U16)sx + (S3_U16)sw) * format.bits + 7U) / 8U - byte0;
+    phase = (S3_U16)(((S3_U32)(S3_U16)sx * format.bits - byte0 * 8U) / format.bits);
+    for (y = (S3_I16)top; y < (S3_I16)bottom; ++y) {
+        row = S3_StretchRow((S3_U16)(y - dy), (S3_U16)sh, (S3_U16)dh);
+        if (row != last_row) {
+            /* Source row `row` from the top of the rectangle is DIB scan
+               sy + sh - 1 - row (scans count from the bottom). Convert it
+               once; repeated destination rows reuse the scaled buffer. */
+            scan = (S3_U16)(sy + sh - 1 - row);
+            s3_dib_scan((S3_U8 S3_FAR *)bits, (S3_U32)scan * format.stride + byte0,
+                        s3_dib_row, (S3_U16)bytes, 0);
+            s3_dib_to_target(&format, target.kind, (S3_U16)sw, target.bytes_pixel, phase);
+            S3_StretchRowPixels(s3_dib_row, s3_device_row, s3_dib_map, count,
+                                target.bytes_pixel);
+            last_row = row;
+        }
+        if (!S3_TargetWriteRow(&target, (S3_I16)left, y, count, s3_dib_row)) return 0;
+    }
+    return sh;
 }
 
 S3_U16 S3_DibToDevice(void S3_FAR *device, S3_I16 x, S3_I16 y,

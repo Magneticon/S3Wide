@@ -406,6 +406,62 @@ static S3_U16 s3_setdibitstodevice_body(
                                  translate, 256, clip_rect);
 }
 
+S3_I16 S3_FAR S3_PASCAL StretchBlt(void S3_FAR *destination,
+                                   S3_I16 dx, S3_I16 dy, S3_I16 dw, S3_I16 dh,
+                                   void S3_FAR *source,
+                                   S3_I16 sx, S3_I16 sy, S3_I16 sw, S3_I16 sh,
+                                   S3_U32 rop3, void S3_FAR *brush,
+                                   void S3_FAR *draw_mode,
+                                   S3_RECT16 S3_FAR *clip_rect)
+{
+    S3_RECT16 destination_rect, source_rect;
+    int excluded, result;
+    (void)brush;
+    (void)draw_mode;
+    if (destination == (void S3_FAR *)0 || source == (void S3_FAR *)0) return -1;
+    if (S3_DisplayBlocked(destination, source)) return 1;
+    S3_DisplaySetRect(&destination_rect, dx, dy, (S3_I32)dx + dw, (S3_I32)dy + dh);
+    S3_DisplaySetRect(&source_rect, sx, sy, (S3_I32)sx + sw, (S3_I32)sy + sh);
+    excluded = S3_DisplayExclude(destination, &destination_rect, source, &source_rect);
+    result = S3_RasterStretchBlt(destination, dx, dy, dw, dh, source, sx, sy, sw, sh,
+                                 rop3, clip_rect);
+    S3_DisplayUnexclude(excluded);
+    S3_TRACE_EVENT(result > 0 ? "StretchBlt" : result < 0 ? "StretchBlt.gdi"
+                                                          : "StretchBlt.fail",
+                   (S3_U16)dw, (S3_U16)sw);
+    return (S3_I16)result;
+}
+
+S3_I16 S3_FAR S3_PASCAL StretchDIBits(void S3_FAR *destination, S3_U16 get,
+                                      S3_I16 dx, S3_I16 dy, S3_I16 dw, S3_I16 dh,
+                                      S3_I16 sx, S3_I16 sy, S3_I16 sw, S3_I16 sh,
+                                      S3_U8 S3_FAR *bits,
+                                      S3_BITMAPINFO16 S3_FAR *bitmap_info,
+                                      S3_I16 S3_FAR *translate, S3_U32 rop3,
+                                      void S3_FAR *brush, void S3_FAR *draw_mode,
+                                      S3_RECT16 S3_FAR *clip_rect)
+{
+    S3_RECT16 bounds;
+    int excluded;
+    S3_I16 result;
+    (void)translate;
+    (void)brush;
+    (void)draw_mode;
+    /* Reading the device into a DIB (get) is left to GDI. */
+    if (get != 0 || destination == (void S3_FAR *)0) return -1;
+    if (S3_DisplayBlocked(destination, (void S3_FAR *)0)) return sh > 0 ? sh : 1;
+    S3_DisplaySetRect(&bounds, dx, dy, (S3_I32)dx + dw, (S3_I32)dy + dh);
+    excluded = S3_DisplayExclude(destination, &bounds, (void S3_FAR *)0,
+                                 (const S3_RECT16 S3_FAR *)0);
+    result = S3_DibStretchToDevice(destination, dx, dy, dw, dh, sx, sy, sw, sh,
+                                   bits, bitmap_info, rop3, clip_rect);
+    S3_DisplayUnexclude(excluded);
+    S3_TRACE_EVENT(result > 0 ? "StretchDIBits" : result < 0 ? "StretchDIBits.gdi"
+                                                             : "StretchDIBits.fail",
+                   (S3_U16)dw, (S3_U16)sw);
+    return result;
+}
+
 S3_U16 S3_FAR S3_PASCAL SetDIBitsToDevice(
                                void S3_FAR *destination,
                                S3_U16 x, S3_U16 y,

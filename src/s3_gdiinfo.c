@@ -44,14 +44,17 @@ int S3_BuildGDIInfo(S3_GDIINFO S3_FAR *info)
     /* The capability set of a stock-class 256-colour raster display, without
        RC_PALETTE: the colours are a fixed 3:3:2 cube. GDI simulates curves,
        polygons and styled or wide lines through polylines and scanlines, and
-       realizes raster fonts itself for ExtTextOut. */
+       realizes raster fonts itself for ExtTextOut. StretchBlt and
+       StretchDIBits are offered: the driver enlarges with SRCCOPY itself and
+       hands every other case back to GDI's emulation. */
     info->dpCurves = 0;                      /* CC_NONE */
     info->dpLines = S3_LC_POLYLINE;
     info->dpPolygonals = S3_PC_SCANLINE;
     info->dpText = S3_TC_CP_STROKE | S3_TC_RA_ABLE;
     info->dpClip = S3_CP_RECTANGLE;
     info->dpRaster = S3_RC_BITBLT | S3_RC_BITMAP64 | S3_RC_GDI20_OUTPUT |
-                     S3_RC_DI_BITMAP | S3_RC_DIBTODEV;
+                     S3_RC_DI_BITMAP | S3_RC_DIBTODEV | S3_RC_STRETCHBLT |
+                     S3_RC_STRETCHDIB;
 
     info->dpAspectX = 100;
     info->dpAspectY = 100;

@@ -144,6 +144,39 @@ The same trace showed the owner's SYSTEM.INI asking for 1920x1080x16 on
 BIOS lacked the mode and the driver fell back to the native 1280x720x8 S3
 mode (`vbe.nomode`, `mode.selected 0001`).
 
+## Native stretching (StretchBlt, StretchDIBits)
+
+Video for Windows' full-screen mode switches to a 320x240/320x200 VGA mode
+through DISPDIB and bypasses the display driver, so a 16:9 film is shown
+in a 4:3 mode (DOSBox-X then stretches it to the window). Playing in a
+window through the driver keeps the desktop's shape, but every frame was
+stretched by GDI's emulation (GetDIBits/SetDIBits bands and BitBlt), which
+is slow and, at 16/32 bpp beyond about 800 pixels wide, draws nothing.
+
+The driver now exports StretchBlt (27) and StretchDIBits (28) and reports
+RC_STRETCHBLT | RC_STRETCHDIB. It draws SRCCOPY enlargements (and same
+size) itself: a column map built once per call, each source row converted
+once, repeated destination rows written again from the scaled buffer.
+Shrinking (whose result depends on the stretch mode, which Windows 3.1's
+DRAWMODE does not carry), mirroring, other ROPs, RLE sources, a device
+source to itself and GetDIBits-style reads return -1 so GDI emulates them
+as before.
+
+GDI's choice of source pixel was measured with `DISPSMAP.EXE`: a
+Bresenham replicator, destination pixel i shows source pixel
+((i + 1) * src - e0 - 1) / dst with e0 = ceil(src / 2) for columns and
+ceil(src / 2) - 1 for rows. The driver uses the same rule, and host tests
+check it against the measured sequences.
+
+`DISPSTR.EXE` draws ten cases natively (SRCCOPY) and through GDI's
+emulation (MERGECOPY with a white brush, same pixels, always emulated):
+1x, 2x, fractional 40->103 and 30->77, sub-rectangles, 1/4/8/24-bpp DIBs,
+StretchBlt from bitmaps. All match pixel for pixel on the S3 path (8 bpp)
+and at 1280x720x32 and 1920x1080 16/32 bpp. Frame time for 320x180 to the
+full screen at `cycles=fixed 100000`: 1280x720x32 55 ms native vs 585 ms
+GDI; 1920x1080x16 73 ms; 1920x1080x32 91 ms (GDI's emulation draws
+nothing at that width).
+
 ## Windows Setup (OEMSETUP.INF)
 
 `package/OEMSETUP.INF` (written by `package/make_oemsetup.py`) offers 39

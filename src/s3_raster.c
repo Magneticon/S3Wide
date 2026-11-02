@@ -14,6 +14,7 @@
 static S3_U8 S3_FAR_DATA s3_dst_row[S3_ROW_BYTES_MAX];
 static S3_U8 S3_FAR_DATA s3_src_row[S3_ROW_BYTES_MAX];
 static S3_U8 S3_FAR_DATA s3_pat_row[S3_ROW_BYTES_MAX];
+static S3_U16 S3_FAR_DATA s3_stretch_map[S3_ROW_MAX];
 
 int S3_BindTarget(void S3_FAR *device, S3_TARGET S3_FAR *target)
 {
@@ -428,6 +429,107 @@ static void s3_convert_source(S3_U16 src_kind, S3_U16 dst_kind, S3_U16 count,
                                      colour_bits) == background ? 0xFF : 0x00);
         }
     }
+}
+
+/* GDI's own stretching replicates each source pixel with a Bresenham
+   error term: source pixel s ends before destination pixel
+   (e0 + (s + 1) * dst) / src, so destination pixel i shows source pixel
+   ((i + 1) * src - e0 - 1) / dst. Measured on WfW 3.11 (DISPSMAP.EXE),
+   e0 = ceil(src / 2) for columns and ceil(src / 2) - 1 for rows; matching
+   it keeps the driver's result identical to GDI's. */
+static S3_U16 s3_stretch_pick(S3_U32 i, S3_U16 src_ext, S3_U16 dst_ext, S3_U16 e0)
+{
+    S3_I32 s = ((S3_I32)(i + 1) * src_ext - e0 - 1) / dst_ext;
+    if (s < 0) s = 0;
+    if (s >= (S3_I32)src_ext) s = src_ext - 1;
+    return (S3_U16)s;
+}
+
+void S3_StretchMap(S3_U16 S3_FAR *map, S3_U16 first, S3_U16 count,
+                   S3_U16 src_ext, S3_U16 dst_ext)
+{
+    S3_U16 i, e0 = (S3_U16)((src_ext + 1U) / 2U);
+    for (i = 0; i < count; ++i) {
+        map[i] = s3_stretch_pick((S3_U32)first + i, src_ext, dst_ext, e0);
+    }
+}
+
+S3_U16 S3_StretchRow(S3_U16 v, S3_U16 src_ext, S3_U16 dst_ext)
+{
+    return s3_stretch_pick(v, src_ext, dst_ext, (S3_U16)((src_ext + 1U) / 2U - 1U));
+}
+
+void S3_StretchRowPixels(S3_U8 S3_FAR *out, const S3_U8 S3_FAR *in,
+                         const S3_U16 S3_FAR *map, S3_U16 count,
+                         S3_U16 bytes_pixel)
+{
+    S3_U16 i;
+    if (bytes_pixel == 4) {
+        S3_U32 S3_FAR *o = (S3_U32 S3_FAR *)out;
+        const S3_U32 S3_FAR *p = (const S3_U32 S3_FAR *)in;
+        for (i = 0; i < count; ++i) o[i] = p[map[i]];
+    } else if (bytes_pixel == 2) {
+        S3_U16 S3_FAR *o = (S3_U16 S3_FAR *)out;
+        const S3_U16 S3_FAR *p = (const S3_U16 S3_FAR *)in;
+        for (i = 0; i < count; ++i) o[i] = p[map[i]];
+    } else {
+        for (i = 0; i < count; ++i) out[i] = in[map[i]];
+    }
+}
+
+int S3_RasterStretchBlt(void S3_FAR *destination, S3_I16 dx, S3_I16 dy,
+                        S3_I16 dw, S3_I16 dh, void S3_FAR *source,
+                        S3_I16 sx, S3_I16 sy, S3_I16 sw, S3_I16 sh,
+                        S3_U32 rop3, const S3_RECT16 S3_FAR *clip)
+{
+    S3_TARGET dst, src;
+    S3_I32 left, top, right, bottom;
+    S3_I16 y;
+    S3_U16 count, row, last_row = 0xFFFFU;
+
+    if ((S3_U8)(rop3 >> 16) != 0xCC || dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0 ||
+        dw < sw || dh < sh || sw > S3_ROW_MAX) {
+        return -1;
+    }
+    if (!S3_BindTarget(destination, &dst) || !S3_BindTarget(source, &src) ||
+        dst.kind == S3_TARGET_MEM1 || src.kind == S3_TARGET_MEM1 ||
+        (src.surface == dst.surface && src.bits == dst.bits) ||
+        sx < 0 || sy < 0 || (S3_I32)sx + sw > (S3_I32)src.width ||
+        (S3_I32)sy + sh > (S3_I32)src.height) {
+        return -1;
+    }
+    left = dx;
+    top = dy;
+    right = (S3_I32)dx + dw;
+    bottom = (S3_I32)dy + dh;
+    if (left < 0) left = 0;
+    if (top < 0) top = 0;
+    if (right > (S3_I32)dst.width) right = dst.width;
+    if (bottom > (S3_I32)dst.height) bottom = dst.height;
+    if (clip != (const S3_RECT16 S3_FAR *)0) {
+        if (clip->left > left) left = clip->left;
+        if (clip->top > top) top = clip->top;
+        if (clip->right < right) right = clip->right;
+        if (clip->bottom < bottom) bottom = clip->bottom;
+    }
+    if (left >= right || top >= bottom) return 1;
+    count = (S3_U16)(right - left);
+    S3_StretchMap(s3_stretch_map, (S3_U16)(left - dx), count, (S3_U16)sw, (S3_U16)dw);
+    for (y = (S3_I16)top; y < (S3_I16)bottom; ++y) {
+        row = S3_StretchRow((S3_U16)(y - dy), (S3_U16)sh, (S3_U16)dh);
+        if (row != last_row) {
+            /* A new source row: read it once and scale it; repeated rows
+               are written again from the scaled buffer. */
+            if (!S3_TargetReadRow(&src, sx, (S3_I16)(sy + row), (S3_U16)sw, s3_src_row)) {
+                return 0;
+            }
+            S3_StretchRowPixels(s3_dst_row, s3_src_row, s3_stretch_map, count,
+                                dst.bytes_pixel);
+            last_row = row;
+        }
+        if (!S3_TargetWriteRow(&dst, (S3_I16)left, y, count, s3_dst_row)) return 0;
+    }
+    return 1;
 }
 
 int S3_RasterBitBlt(void S3_FAR *destination, S3_I16 dx, S3_I16 dy,
