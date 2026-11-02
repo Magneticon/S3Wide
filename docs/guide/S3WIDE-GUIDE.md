@@ -30,23 +30,24 @@ S3Wide (`S3WIDE.DRV`) is a display driver for Windows 3.1 and Windows for Workgr
 
 - Windows 3.1 or Windows for Workgroups 3.11, running in 386 Enhanced Mode.
 - A 386 processor or later.
-- Your own Windows installation or disks. S3Wide uses the cursors, icons and window bitmaps of Windows' standard VGA driver (`VGA.DRV`), plus a few standard fonts. They belong to Microsoft and are not included; the S3PREP tool takes them from your own Windows (chapter 3).
+- Your own licensed copy of Windows. S3Wide carries the cursors, icons and window bitmaps of Windows' standard VGA driver, and the package includes the standard grabber, logo and fonts Setup installs with it; those parts belong to Microsoft.
 - Either DOSBox-X (tested with version 2026.08.31) or a PC whose video BIOS offers VBE 2.0 linear-frame-buffer modes. On real hardware, S3Wide has not been tested yet.
 
 ## 2. The package
 
 | File | What it is |
 |---|---|
-| `S3WIDE.BIN` | The driver, without the Microsoft cursors, icons and bitmaps |
-| `S3PREP.EXE` | DOS tool: makes `S3WIDE.DRV` from `S3WIDE.BIN` and your own `VGA.DRV`, and collects the files Setup needs |
+| `S3WIDE.DRV` | The driver |
 | `OEMSETUP.INF` | Lets Windows Setup install S3Wide and list its modes |
 | `DISPDIB.DLL` | Optional replacement for Video for Windows' full-screen display library (chapter 7) |
 | `VBEMODES.EXE` | DOS tool that lists your machine's VESA modes and says which ones S3Wide can use |
 | `INSTALL.TXT` | Short installation notes |
 | `S3WIDE-GUIDE.PDF` | This guide |
 | `SHA256.TXT` | Checksums of the files |
+| `VGA.3GR`, `VGALOGO.LGO`, `VGALOGO.RLE` | The DOS-window grabber and start-up logo Setup installs with a VGA-style display |
+| `VGASYS.FON`, `VGAFIX.FON`, `VGAOEM.FON`, `CGA40WOA.FON`, `CGA80WOA.FON`, `EGA40WOA.FON`, `EGA80WOA.FON`, `DOSAPP.FON` | The system and DOS-window fonts Setup installs with it |
 
-Everything in the package is S3Wide's own code.
+Everything is ready to install: unpack the zip into one folder and run Windows Setup (3.3). The grabber, logo and font files are standard Windows for Workgroups 3.11 files, included so that Setup does not ask for Windows disks.
 
 <!-- pagebreak -->
 
@@ -72,39 +73,7 @@ COPY SYSTEM.BAK SYSTEM.INI
 
 Or edit `SYSTEM.INI` with `EDIT` and set `display.drv=vga.drv` in the `[boot]` section.
 
-### 3.2 Prepare the driver with S3PREP (once)
-
-1. Unpack the package into one folder, for example `C:\S3WIDE`.
-2. At the DOS prompt, or in an MS-DOS Prompt window, run S3PREP with the folder Windows is installed in:
-
-```
-C:\S3WIDE\S3PREP C:\WINDOWS
-```
-
-S3PREP reads `C:\WINDOWS\SYSTEM\VGA.DRV` and writes `C:\S3WIDE\S3WIDE.DRV`. It also copies the files Windows Setup installs with a VGA-style display into `C:\S3WIDE`, so Setup finds them there:
-
-- `VGA.3GR`, the DOS-window grabber
-- `VGALOGO.LGO` and `VGALOGO.RLE`, the start-up logo
-- `VGASYS.FON`, `VGAFIX.FON`, `VGAOEM.FON`, `CGA40WOA.FON`, `CGA80WOA.FON`, `EGA40WOA.FON`, `EGA80WOA.FON` and `DOSAPP.FON`, the system and DOS-window fonts
-
-A successful run looks like this:
-
-```
-S3PREP: builds S3WIDE.DRV from your own VGA.DRV
-S3PREP: wrote C:\S3WIDE\S3WIDE.DRV with 79 resources from C:\WINDOWS\SYSTEM\VGA.DRV
-S3PREP: done, all Setup files are here. Now install with Windows Setup (see INSTALL.TXT).
-```
-
-**No VGA.DRV?** If Windows was installed with another display driver, `VGA.DRV` may be missing. Unpack it from your Windows disks (it may be called `VGA.DR_` there), then point S3PREP at it:
-
-```
-EXPAND A:\VGA.DR_ C:\S3WIDE\VGA.DRV
-C:\S3WIDE\S3PREP C:\S3WIDE\VGA.DRV
-```
-
-Files S3PREP reports as "not found" are asked for later by Setup. Give Setup your Windows disk, or the folder that holds the file. Run S3PREP again whenever you update `S3WIDE.BIN`.
-
-### 3.3 Choose a mode with VBEMODES
+### 3.2 Choose a mode with VBEMODES
 
 At the DOS prompt (before Windows starts), list the modes your video BIOS offers:
 
@@ -116,9 +85,9 @@ Each line of `MODES.TXT` is one mode, for example `MODE 112 640x480 32bpp ... s3
 
 If no line says `s3wide=yes`, the BIOS has no VBE 2.0 linear frame buffer, and only the S3 Trio64 1280x720x8 mode can work. Under DOSBox-X, the modes depend on the emulated card and on the settings in chapter 4.
 
-### 3.4 Install with Windows Setup
+### 3.3 Install with Windows Setup
 
-1. Prepare the driver with S3PREP (3.2).
+1. Unpack the package into one folder, for example `C:\S3WIDE`.
 2. In Program Manager, open **Main**, then **Windows Setup**. Choose **Options**, **Change System Settings**.
 
 ![Windows Setup, Options, Change System Settings. Open the Display list.](img/setup-change-system-settings.png)
@@ -126,17 +95,17 @@ If no line says `s3wide=yes`, the BIOS has no VBE 2.0 linear frame buffer, and o
 3. Open the **Display** list and pick the last entry, **Other display (Requires disk from OEM)...**. Type the package folder (`C:\S3WIDE`) and press OK.
 4. Pick an **S3Wide** entry, for example "S3Wide 1920x1080 65K colors". Use a mode VBEMODES marked `s3wide=yes`.
 5. Setup may ask whether to use the current or the new driver: choose **New**.
-6. Setup may ask for the "S3Wide display driver" disk or for a Windows disk (for example for `CGA40WOA.FON`). Type the package folder (`C:\S3WIDE`), where S3PREP put those files. It may ask more than once; give the same folder each time. For a file S3PREP did not find, insert the Windows disk Setup names.
+6. Setup may ask for the "S3Wide display driver" disk or for a Windows disk (for example for `CGA40WOA.FON`). Type the package folder (`C:\S3WIDE`): the package holds those files. It may ask more than once; give the same folder each time.
 
 ![Setup asking for a Windows disk. Type the package folder (C:\S3WIDE) instead of A:\.](img/setup-disk-prompt.png)
 
 7. Restart Windows when Setup offers it.
 
-Every S3Wide entry installs the same driver with small (96 dpi) fonts. Setup writes `display.drv=s3wide.drv`, `386grabber=vga.3gr` and `display=*vddvga` into `SYSTEM.INI`, plus an `[s3wide.drv]` section with the mode. To change the mode later, run Setup again and pick another entry, or edit that section (3.6).
+Every S3Wide entry installs the same driver with small (96 dpi) fonts. Setup writes `display.drv=s3wide.drv`, `386grabber=vga.3gr` and `display=*vddvga` into `SYSTEM.INI`, plus an `[s3wide.drv]` section with the mode. To change the mode later, run Setup again and pick another entry, or edit that section (3.5).
 
-### 3.5 Install by hand
+### 3.4 Install by hand
 
-1. Prepare the driver with S3PREP (3.2) and copy `S3WIDE.DRV` into `C:\WINDOWS\SYSTEM`. It must go into `SYSTEM`, not into `C:\WINDOWS` itself.
+1. Copy `S3WIDE.DRV` into `C:\WINDOWS\SYSTEM`. It must go into `SYSTEM`, not into `C:\WINDOWS` itself.
 2. Edit `C:\WINDOWS\SYSTEM.INI`:
 
 ```
@@ -152,11 +121,11 @@ Height=1080
 Depth=16
 ```
 
-Leave the other `[boot]` lines (`386grabber=vga.3gr`, `oemfonts.fon=`, `fonts.fon=`, `fixedfon.fon=`) as they are for VGA. The grabber, logo and font files must be in `C:\WINDOWS\SYSTEM`: they are already there if Windows ever used its VGA driver, or you can copy them from the package folder after running S3PREP.
+Leave the other `[boot]` lines (`386grabber=vga.3gr`, `oemfonts.fon=`, `fonts.fon=`, `fixedfon.fon=`) as they are for VGA. The grabber, logo and font files must be in `C:\WINDOWS\SYSTEM`: they are already there if Windows ever used its VGA driver, or you can copy them from the package folder.
 
 3. Start Windows (`WIN`).
 
-### 3.6 SYSTEM.INI reference
+### 3.5 SYSTEM.INI reference
 
 **[s3wide.drv]**, the desktop mode:
 
@@ -357,7 +326,7 @@ To go back, copy `DISPDIB.MS` over `DISPDIB.DLL`.
 
 ### 7.4 Settings and limits
 
-- Set `Aspect` in `[dispdib]` to the shape of your screen (3.6). The default `16:9` suits DOSBox-X full screen on a 16:9 monitor with `aspect=false`.
+- Set `Aspect` in `[dispdib]` to the shape of your screen (3.5). The default `16:9` suits DOSBox-X full screen on a 16:9 monitor with `aspect=false`.
 - The shape is right on a full-screen display. A DOSBox-X window takes the shape of the video mode unless its size is fixed.
 - Media Player refuses films bigger than its selected 320x240 or 320x200 full-screen mode before DISPDIB is called ("too big to be played in the selected VGA mode"). Play those in a window.
 - If something looks wrong, set `Log=1` and look at `C:\DISPDIB.LOG`.
@@ -370,9 +339,7 @@ To go back, copy `DISPDIB.MS` over `DISPDIB.DLL`.
 |---|---|
 | Windows does not start, or the screen stays black | From DOS, restore `SYSTEM.BAK` or set `display.drv=vga.drv` (3.1). Check the mode with VBEMODES and the DOSBox-X options (chapter 4) |
 | The desktop is smaller than the mode you asked for | The BIOS lacks that mode and S3Wide fell back to a smaller one. On DOSBox-X, enable `allow high definition vesa modes` and the two `vesa modelist ... limit=0` options, and check VBEMODES |
-| Setup asks for a Windows disk or the "S3Wide display driver" disk | Type the package folder (`C:\S3WIDE`). If S3PREP reported that file as not found, insert the Windows disk Setup names |
-| S3PREP says there is no VGA.DRV | Unpack it from your Windows disks with EXPAND and pass its path (3.2) |
-| S3PREP says VGA.DRV is compressed | It was copied straight from a disk. Unpack it with `EXPAND` first |
+| Setup asks for a Windows disk or the "S3Wide display driver" disk | Type the package folder (`C:\S3WIDE`) |
 | Windows does not use S3Wide after a manual install | `S3WIDE.DRV` must be in `C:\WINDOWS\SYSTEM`, not `C:\WINDOWS` |
 | Colours look coarse | You are at 8 bpp, which uses a fixed 256-colour set. Use 16 or 32 bpp |
 | Full-screen video is stretched too wide | Install the S3Wide `DISPDIB.DLL` (chapter 7) |
@@ -416,14 +383,14 @@ Building needs:
 
 ```
 export WATCOM=C:/WATCOM OWBIN=binnt64 CC=clang PYTHON=python
-sh ./build.sh                     # build/s3wide_driver.dll + host tests
+VGA_DRV=C:/WINDOWS/SYSTEM/VGA.DRV sh ./build.sh   # build/s3wide_driver.dll + host tests
 sh dispdib/build.sh               # build/DISPDIB.DLL
 sh tests/win16/build-win16-probes.sh
-sh package/make-release.sh 1.0    # the redistributable zip
+WINSYS=C:/WINDOWS/SYSTEM sh package/make-package.sh build/s3wide_driver.dll 1.0.0
 ```
 
-- `build.sh` without `VGA_DRV` makes the driver as released: `S3WIDE.BIN`, with no Microsoft resources.
-- With `VGA_DRV=path\to\VGA.DRV`, it makes a local driver with those resources built in. Do not distribute that build.
+- `build.sh` needs `VGA_DRV=path\to\VGA.DRV`: a Windows display driver must carry the cursors, icons and window bitmaps USER loads from it, and the build takes them from that file. Without it, the result (S3WIDE.BIN) has only its version resource and Windows cannot start with it.
+- `package/make-package.sh DRIVER VERSION` with `WINSYS=` (a Windows `SYSTEM` folder) makes the ready-to-install zip with the grabber, logo and fonts.
 - `S3_TRACE=1` makes the tracing build, which logs to `C:\S3TRACE.TXT`.
 
 ### 10.2 Source layout
@@ -437,7 +404,7 @@ sh package/make-release.sh 1.0    # the redistributable zip
 | `src/s3_cursor.c`, `s3_swcursor.c` | Hardware and software mouse cursors |
 | `src/s3_switch.c` | Full-screen DOS switching (INT 2Fh) |
 | `dispdib/` | The replacement DISPDIB.DLL |
-| `tools/s3prep/` | S3PREP |
+| `tools/s3prep/` | S3PREP (developer tool, see 10.4) |
 | `package/` | OEMSETUP.INF generator, INSTALL.TXT, packaging scripts |
 | `tests/` | Host tests, Win16 probes, DOSBox-X test runner |
 | `docs/research/` | Measurements and design notes for each change |
@@ -450,8 +417,8 @@ sh package/make-release.sh 1.0    # the redistributable zip
 - Each probe compares the driver's output with GDI's own results or with the emulator's picture.
 - `docs/research/` records every result with its configuration.
 
-### 10.4 How S3PREP works
+### 10.4 S3PREP
 
-`S3WIDE.BIN` is a complete driver whose resource table holds only its version information. S3PREP rewrites the file's NE header with a new resource table: the driver's version resource, followed by every resource of `VGA.DRV` except its version (11 cursors, 5 icons with 13 images, 34 bitmaps, and the OEMBIN and STRINGS tables: 79 resources). It then copies the code segments with their relocations, followed by the resource data.
+`tools/s3prep/` builds `S3PREP.EXE`, a DOS tool that turns a driver built without `VGA_DRV` (`S3WIDE.BIN`) into `S3WIDE.DRV` using a given `VGA.DRV`, for example on a machine without the build tools: `S3PREP C:\WINDOWS` with `S3WIDE.BIN` beside it. `S3WIDE.BIN` is a complete driver whose resource table holds only its version information. S3PREP rewrites the file's NE header with a new resource table: the driver's version resource, followed by every resource of `VGA.DRV` except its version (11 cursors, 5 icons with 13 images, 34 bitmaps, and the OEMBIN and STRINGS tables: 79 resources). It then copies the code segments with their relocations, followed by the resource data.
 
 The result matches a driver linked with those resources: the same segments, entry table, names and resource data.

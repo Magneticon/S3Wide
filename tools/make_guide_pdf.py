@@ -164,7 +164,7 @@ def main():
     def flush_para():
         if para:
             # A lead-in ("...:") stays with what follows it.
-            if para[-1].endswith(':') and pdf.get_y() > pdf.h - 80:
+            if plain(para[-1]).endswith(':') and pdf.get_y() > pdf.h - 80:
                 pdf.add_page()
             write_inline(pdf, ' '.join(para))
             pdf.ln(2.2)

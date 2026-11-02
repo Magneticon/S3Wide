@@ -37,6 +37,11 @@ mkdir -p "$out"
 cp "$driver" "$out/S3WIDE.DRV"
 cp build/VBEMODES.EXE "$out/VBEMODES.EXE"
 cp build/DISPDIB.DLL "$out/DISPDIB.DLL"
+extra=
+if [ -f docs/guide/S3WIDE-GUIDE.pdf ]; then
+    cp docs/guide/S3WIDE-GUIDE.pdf "$out/S3WIDE-GUIDE.PDF"
+    extra=S3WIDE-GUIDE.PDF
+fi
 support="VGA.3GR VGALOGO.LGO VGALOGO.RLE VGASYS.FON VGAFIX.FON VGAOEM.FON
 CGA40WOA.FON CGA80WOA.FON EGA40WOA.FON EGA80WOA.FON DOSAPP.FON"
 if [ -n "${WINSYS:-}" ]; then
@@ -48,7 +53,7 @@ else
     echo "WINSYS not set: Setup will ask for the Windows disk with $support" >&2
     support=
 fi
-"$PYTHON" - "$out" $support <<'EOF'
+"$PYTHON" - "$out" $extra $support <<'EOF'
 import hashlib, os, sys, zipfile
 out = sys.argv[1]
 for name in ("OEMSETUP.INF", "INSTALL.TXT"):

@@ -17,11 +17,7 @@ Nothing is stretched: Windows really runs at the resolution you choose.
 
 Files
 -----
-S3WIDE.BIN    the driver, without the Windows cursors, icons and window
-              bitmaps (those belong to Microsoft; S3PREP adds them from
-              your own Windows)
-S3PREP.EXE    DOS tool that makes S3WIDE.DRV from S3WIDE.BIN and your own
-              VGA.DRV, and copies the files Setup needs into this folder
+S3WIDE.DRV    the driver
 OEMSETUP.INF  lets Windows Setup install it and list its modes
 VBEMODES.EXE  DOS tool that lists the VESA modes of this machine and says
               which ones S3WIDE.DRV can use (s3wide=yes)
@@ -31,11 +27,16 @@ DISPDIB.DLL   optional replacement for Video for Windows' full-screen
 S3WIDE-GUIDE.PDF  the full guide, with DOSBox-X settings and pictures
 INSTALL.TXT   this file
 SHA256.TXT    checksums of the files
+VGA.3GR, VGALOGO.LGO, VGALOGO.RLE, VGASYS.FON, VGAFIX.FON, VGAOEM.FON,
+CGA40WOA.FON, CGA80WOA.FON, EGA40WOA.FON, EGA80WOA.FON, DOSAPP.FON
+              the standard Windows files Setup copies for a VGA-style
+              display (DOS-window grabber, start-up logo, system and
+              DOS-window fonts), so Setup needs no Windows disk
 
-Everything in this package is S3Wide's own code. The Microsoft parts a
-Windows display driver needs come from your own Windows 3.1 or Windows
-for Workgroups 3.11: S3PREP takes them from your installation, and Setup
-asks for your Windows disks for anything that is missing.
+S3WIDE.DRV carries the cursors, icons and window bitmaps of Windows' own
+VGA driver, and the files in the last entry are standard Windows for
+Workgroups 3.11 files. Those parts belong to Microsoft: use this package
+with your own licensed copy of Windows.
 
 Before you install: keep a way back
 -----------------------------------
@@ -45,24 +46,6 @@ Before you install: keep a way back
        CD \WINDOWS
        COPY SYSTEM.BAK SYSTEM.INI
    or edit SYSTEM.INI with EDIT and set   display.drv=vga.drv   in [boot].
-
-Prepare the driver (once)
--------------------------
-1. Unpack the files into one folder, for example C:\S3WIDE.
-2. At the DOS prompt (or in an MS-DOS Prompt window) run
-       C:\S3WIDE\S3PREP C:\WINDOWS
-   with the folder Windows is installed in. It reads
-   WINDOWS\SYSTEM\VGA.DRV, writes C:\S3WIDE\S3WIDE.DRV, and copies the
-   VGA grabber, logo and fonts Setup installs with it (VGA.3GR,
-   VGALOGO.LGO, VGALOGO.RLE, VGASYS.FON, VGAFIX.FON, VGAOEM.FON,
-   CGA40WOA.FON, CGA80WOA.FON, EGA40WOA.FON, EGA80WOA.FON, DOSAPP.FON).
-3. If it says there is no VGA.DRV, unpack it from your Windows disks
-   (on the disks it may be VGA.DR_ or a compressed VGA.DRV), for example
-       EXPAND A:\VGA.DR_ C:\S3WIDE\VGA.DRV
-       C:\S3WIDE\S3PREP C:\S3WIDE\VGA.DRV
-   Files it reports as not found are asked for by Setup later: give
-   Setup your Windows disk (or the folder that holds that file).
-Run S3PREP again after updating S3WIDE.BIN.
 
 Choose a mode
 -------------
@@ -75,7 +58,7 @@ linear frame buffer and only the S3 Trio64 1280x720x8 mode can work.
 
 Install with Windows Setup
 --------------------------
-1. Prepare the driver with S3PREP (above).
+1. Unpack the files into one folder, for example C:\S3WIDE (or a floppy).
 2. In Program Manager open Main, Windows Setup. Choose Options, Change
    System Settings.
 3. Open the Display list and pick the last entry,
@@ -86,9 +69,8 @@ Install with Windows Setup
 5. Setup may ask whether to use the current or the new driver: choose
    New. If it asks for the "S3Wide display driver" disk or for a
    Windows disk (for example for CGA40WOA.FON), type the package folder
-   (C:\S3WIDE): S3PREP put those files there. It may ask more than once;
-   give the same folder. For a file S3PREP did not find, insert the
-   Windows disk Setup names (or type the folder that holds the file).
+   (C:\S3WIDE): the package holds those files. It may ask more than
+   once; give the same folder.
 6. Restart Windows when Setup offers it.
 
 To change the mode later, repeat steps 2 to 6 and pick another entry, or
@@ -100,8 +82,7 @@ the [s3wide.drv] section.
 
 Install by hand
 ---------------
-1. Prepare the driver with S3PREP (above) and copy S3WIDE.DRV into
-   WINDOWS\SYSTEM.
+1. Copy S3WIDE.DRV into WINDOWS\SYSTEM (not into WINDOWS itself).
 2. Edit WINDOWS\SYSTEM.INI:
 
    In [boot] change the display line to
