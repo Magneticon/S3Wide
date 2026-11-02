@@ -106,6 +106,15 @@ vbesvga OEMSETUP.INF). SETUP.EXE contains the `oemsetup.inf` and
 `oemdisks` strings it reads. Profile and section names stay within 8
 characters, as in SETUP.INF. `package/make-package.sh` builds the zip.
 
+First live test (owner, WfW 3.11 in DOSBox-X): Setup listed the entries,
+then asked for "Windows for Workgroups 3.11 Disk 2" for CGA40WOA.FON. For a
+display with VGA.3GR and "100,96,96", Setup copies VGA.3GR, VGALOGO.LGO/.RLE,
+VGASYS/VGAFIX/VGAOEM.FON and the four *WOA.FON DOS-window fonts (SETUP.INF
+[VGA.3gr], [sysfonts], [fixedfonts], [oemfonts]). The INF now takes the
+grabber and logo from the package disk, and make-package.sh copies all of
+these (and DOSAPP.FON) from an installed WINDOWS\SYSTEM (`WINSYS=`) into the
+local package, so the package folder answers every disk prompt.
+
 The INF has not been run through Setup here. Driving DOS-mode SETUP with
 DOSBox-X AUTOTYPE reached the "Other" disk prompt, but keystrokes were then
 lost or stalled from run to run, so that experiment proved nothing either

@@ -19,13 +19,14 @@ lines.append('; Every entry uses the same driver; the mode goes to [s3wide.drv] 
 lines.append('; SYSTEM.INI (Width, Height, Depth). If the video BIOS lacks the mode,')
 lines.append('; the driver starts in the largest one it can draw that is no larger.')
 lines.append('; 1280x720 256 colors on an S3 Trio64 uses the S3 registers directly.')
+lines.append(';')
+lines.append('; The grabber, logo and the fonts Setup copies for a VGA-style display')
+lines.append('; (VGA*.FON, *WOA.FON) are in the package folder too: when Setup asks')
+lines.append('; for a Windows disk, give it the same folder.')
 lines.append('; ---------------------------------------------------------------')
 lines.append('')
 lines.append('[data]')
 lines.append('    Version="3.10"')
-lines.append('')
-lines.append('[disks]')
-lines.append('    2 =. ,"Microsoft Windows for Workgroups 3.11 Disk 2",disk2')
 lines.append('')
 lines.append('[oemdisks]')
 lines.append('    W =. ,"S3Wide display driver",s3widedisk')
@@ -39,7 +40,7 @@ for index, (w, h) in enumerate(modes):
     for d, colors in depths:
         key = 'sw%02d%s' % (index + 1, {8: 'p', 16: 'h', 32: 't'}[d])
         desc = '"S3Wide %4dx%-4d %s"' % (w, h, colors)
-        lines.append('%-8s = W:s3wide.drv, %-36s, "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, %s'
+        lines.append('%-8s = W:s3wide.drv, %-36s, "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, %s'
                      % (key, desc, key))
         work.append('')
         work.append('[%s]' % key)

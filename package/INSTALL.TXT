@@ -23,9 +23,15 @@ VBEMODES.EXE  DOS tool that lists the VESA modes of this machine and says
               which ones S3WIDE.DRV can use (s3wide=yes)
 INSTALL.TXT   this file
 SHA256.TXT    checksums of the files
+VGA.3GR, VGALOGO.LGO, VGALOGO.RLE, VGASYS.FON, VGAFIX.FON, VGAOEM.FON,
+CGA40WOA.FON, CGA80WOA.FON, EGA40WOA.FON, EGA80WOA.FON, DOSAPP.FON
+              the standard Windows for Workgroups 3.11 files Setup copies
+              for a VGA-style display (DOS-window grabber, start-up logo,
+              system and DOS-window fonts), so Setup needs no Windows disk
 
 This build contains cursor, icon and bitmap resources taken from a
-licensed copy of Microsoft's VGA.DRV. It is for testing on your own
+licensed copy of Microsoft's VGA.DRV, and the files listed above come
+from the same Windows for Workgroups 3.11 installation. It is for testing on your own
 machine only; do not redistribute it.
 
 Before you install: keep a way back
@@ -57,10 +63,10 @@ Install with Windows Setup
 4. Pick an "S3Wide ..." entry, for example "S3Wide 1920x1080 65K colors".
    Use a mode VBEMODES marked s3wide=yes.
 5. Setup may ask whether to use the current or the new driver: choose
-   New. If it asks for "Microsoft Windows for Workgroups 3.11 Disk 2"
-   (for VGA.3GR and the start-up logo, which are already installed),
-   type C:\WINDOWS\SYSTEM. If it asks for the "S3Wide display driver"
-   disk, type the folder from step 1.
+   New. If it asks for the "S3Wide display driver" disk or for a
+   "Microsoft Windows for Workgroups 3.11" disk (for example for
+   CGA40WOA.FON), type the folder from step 1 (C:\S3WIDE): the package
+   holds those files. It may ask more than once; give the same folder.
 6. Restart Windows when Setup offers it.
 
 To change the mode later, repeat steps 2 to 6 and pick another entry, or

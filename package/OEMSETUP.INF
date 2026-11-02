@@ -8,58 +8,59 @@
 ; SYSTEM.INI (Width, Height, Depth). If the video BIOS lacks the mode,
 ; the driver starts in the largest one it can draw that is no larger.
 ; 1280x720 256 colors on an S3 Trio64 uses the S3 registers directly.
+;
+; The grabber, logo and the fonts Setup copies for a VGA-style display
+; (VGA*.FON, *WOA.FON) are in the package folder too: when Setup asks
+; for a Windows disk, give it the same folder.
 ; ---------------------------------------------------------------
 
 [data]
     Version="3.10"
-
-[disks]
-    2 =. ,"Microsoft Windows for Workgroups 3.11 Disk 2",disk2
 
 [oemdisks]
     W =. ,"S3Wide display driver",s3widedisk
 
 [display]
 ;profile  = driver,       description,                        resolution,  286gr, logo code,     VDD,       386grabber, ega.sys, logo data,    work section
-sw01p    = W:s3wide.drv, "S3Wide  640x480  256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw01p
-sw01h    = W:s3wide.drv, "S3Wide  640x480  65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw01h
-sw01t    = W:s3wide.drv, "S3Wide  640x480  16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw01t
-sw02p    = W:s3wide.drv, "S3Wide  800x600  256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw02p
-sw02h    = W:s3wide.drv, "S3Wide  800x600  65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw02h
-sw02t    = W:s3wide.drv, "S3Wide  800x600  16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw02t
-sw03p    = W:s3wide.drv, "S3Wide 1024x768  256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw03p
-sw03h    = W:s3wide.drv, "S3Wide 1024x768  65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw03h
-sw03t    = W:s3wide.drv, "S3Wide 1024x768  16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw03t
-sw04p    = W:s3wide.drv, "S3Wide 1280x720  256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw04p
-sw04h    = W:s3wide.drv, "S3Wide 1280x720  65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw04h
-sw04t    = W:s3wide.drv, "S3Wide 1280x720  16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw04t
-sw05p    = W:s3wide.drv, "S3Wide 1280x800  256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw05p
-sw05h    = W:s3wide.drv, "S3Wide 1280x800  65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw05h
-sw05t    = W:s3wide.drv, "S3Wide 1280x800  16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw05t
-sw06p    = W:s3wide.drv, "S3Wide 1280x1024 256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw06p
-sw06h    = W:s3wide.drv, "S3Wide 1280x1024 65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw06h
-sw06t    = W:s3wide.drv, "S3Wide 1280x1024 16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw06t
-sw07p    = W:s3wide.drv, "S3Wide 1366x768  256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw07p
-sw07h    = W:s3wide.drv, "S3Wide 1366x768  65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw07h
-sw07t    = W:s3wide.drv, "S3Wide 1366x768  16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw07t
-sw08p    = W:s3wide.drv, "S3Wide 1600x900  256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw08p
-sw08h    = W:s3wide.drv, "S3Wide 1600x900  65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw08h
-sw08t    = W:s3wide.drv, "S3Wide 1600x900  16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw08t
-sw09p    = W:s3wide.drv, "S3Wide 1600x1200 256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw09p
-sw09h    = W:s3wide.drv, "S3Wide 1600x1200 65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw09h
-sw09t    = W:s3wide.drv, "S3Wide 1600x1200 16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw09t
-sw10p    = W:s3wide.drv, "S3Wide 1920x1080 256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw10p
-sw10h    = W:s3wide.drv, "S3Wide 1920x1080 65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw10h
-sw10t    = W:s3wide.drv, "S3Wide 1920x1080 16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw10t
-sw11p    = W:s3wide.drv, "S3Wide 1920x1200 256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw11p
-sw11h    = W:s3wide.drv, "S3Wide 1920x1200 65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw11h
-sw11t    = W:s3wide.drv, "S3Wide 1920x1200 16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw11t
-sw12p    = W:s3wide.drv, "S3Wide 2560x1440 256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw12p
-sw12h    = W:s3wide.drv, "S3Wide 2560x1440 65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw12h
-sw12t    = W:s3wide.drv, "S3Wide 2560x1440 16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw12t
-sw13p    = W:s3wide.drv, "S3Wide 3840x2160 256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw13p
-sw13h    = W:s3wide.drv, "S3Wide 3840x2160 65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw13h
-sw13t    = W:s3wide.drv, "S3Wide 3840x2160 16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw13t
+sw01p    = W:s3wide.drv, "S3Wide  640x480  256 colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw01p
+sw01h    = W:s3wide.drv, "S3Wide  640x480  65K colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw01h
+sw01t    = W:s3wide.drv, "S3Wide  640x480  16M colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw01t
+sw02p    = W:s3wide.drv, "S3Wide  800x600  256 colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw02p
+sw02h    = W:s3wide.drv, "S3Wide  800x600  65K colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw02h
+sw02t    = W:s3wide.drv, "S3Wide  800x600  16M colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw02t
+sw03p    = W:s3wide.drv, "S3Wide 1024x768  256 colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw03p
+sw03h    = W:s3wide.drv, "S3Wide 1024x768  65K colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw03h
+sw03t    = W:s3wide.drv, "S3Wide 1024x768  16M colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw03t
+sw04p    = W:s3wide.drv, "S3Wide 1280x720  256 colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw04p
+sw04h    = W:s3wide.drv, "S3Wide 1280x720  65K colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw04h
+sw04t    = W:s3wide.drv, "S3Wide 1280x720  16M colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw04t
+sw05p    = W:s3wide.drv, "S3Wide 1280x800  256 colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw05p
+sw05h    = W:s3wide.drv, "S3Wide 1280x800  65K colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw05h
+sw05t    = W:s3wide.drv, "S3Wide 1280x800  16M colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw05t
+sw06p    = W:s3wide.drv, "S3Wide 1280x1024 256 colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw06p
+sw06h    = W:s3wide.drv, "S3Wide 1280x1024 65K colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw06h
+sw06t    = W:s3wide.drv, "S3Wide 1280x1024 16M colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw06t
+sw07p    = W:s3wide.drv, "S3Wide 1366x768  256 colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw07p
+sw07h    = W:s3wide.drv, "S3Wide 1366x768  65K colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw07h
+sw07t    = W:s3wide.drv, "S3Wide 1366x768  16M colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw07t
+sw08p    = W:s3wide.drv, "S3Wide 1600x900  256 colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw08p
+sw08h    = W:s3wide.drv, "S3Wide 1600x900  65K colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw08h
+sw08t    = W:s3wide.drv, "S3Wide 1600x900  16M colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw08t
+sw09p    = W:s3wide.drv, "S3Wide 1600x1200 256 colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw09p
+sw09h    = W:s3wide.drv, "S3Wide 1600x1200 65K colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw09h
+sw09t    = W:s3wide.drv, "S3Wide 1600x1200 16M colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw09t
+sw10p    = W:s3wide.drv, "S3Wide 1920x1080 256 colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw10p
+sw10h    = W:s3wide.drv, "S3Wide 1920x1080 65K colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw10h
+sw10t    = W:s3wide.drv, "S3Wide 1920x1080 16M colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw10t
+sw11p    = W:s3wide.drv, "S3Wide 1920x1200 256 colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw11p
+sw11h    = W:s3wide.drv, "S3Wide 1920x1200 65K colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw11h
+sw11t    = W:s3wide.drv, "S3Wide 1920x1200 16M colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw11t
+sw12p    = W:s3wide.drv, "S3Wide 2560x1440 256 colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw12p
+sw12h    = W:s3wide.drv, "S3Wide 2560x1440 65K colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw12h
+sw12t    = W:s3wide.drv, "S3Wide 2560x1440 16M colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw12t
+sw13p    = W:s3wide.drv, "S3Wide 3840x2160 256 colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw13p
+sw13h    = W:s3wide.drv, "S3Wide 3840x2160 65K colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw13h
+sw13t    = W:s3wide.drv, "S3Wide 3840x2160 16M colors"       , "100,96,96", , W:vgalogo.lgo, x:*vddvga, W:vga.3gr,,  W:vgalogo.rle, sw13t
 
 [sw01p]
 ,,system.ini,s3wide.drv,"Width=","Width=640"
