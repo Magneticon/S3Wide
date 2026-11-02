@@ -5,6 +5,7 @@
 #   build/DISPBNCH.EXE  GDI timing benchmark on the screen DC
 #   build/DISPRLE.EXE   RLE8/RLE4 DIBs drawn against uncompressed ones
 #   build/DISPHUGE.EXE  huge bitmaps: GDI layout, BitBlt and StretchBlt rows
+#   build/DIBROWS.EXE   SetDIBits/GetDIBits row placement (compare VGA.DRV)
 set -eu
 cd "$(dirname "$0")"
 
@@ -39,4 +40,7 @@ wcl -q -zW -bt=windows -ml -i="$WATCOM/h/win" \
 wcl -q -zW -bt=windows -ml -i="$WATCOM/h/win" \
     -fo=../../build/display_huge_probe.obj \
     -fe=../../build/DISPHUGE.EXE display_huge_probe.c
-echo "Built build/DISPBASE.EXE, build/S3AUTO.EXE, build/DISPBNCH.EXE, build/DISPRLE.EXE and build/DISPHUGE.EXE (not executed by this script)."
+wcl -q -zW -bt=windows -ml -i="$WATCOM/h/win" \
+    -fo=../../build/display_dibrows_probe.obj \
+    -fe=../../build/DIBROWS.EXE display_dibrows_probe.c
+echo "Built the probes above in build/ (not executed by this script)."

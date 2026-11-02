@@ -56,6 +56,11 @@ S3_I16 S3_FAR S3_PASCAL BitBlt(void S3_FAR *destination,
     S3_DisplayUnexclude(excluded);
     S3_TRACE_EVENT(ok ? "BitBlt" : "BitBlt.fail", (S3_U16)((S3_U32)rop3 >> 16),
                    ((S3_PDEV S3_FAR *)destination)->pdType);
+    S3_TRACE_EVENT("BitBlt.src", source_x, source_y);
+    S3_TRACE_EVENT("BitBlt.srcdev", source == (void S3_FAR *)0 ? 0xFFFFU
+                   : ((S3_PDEV S3_FAR *)source)->pdType,
+                   source == (void S3_FAR *)0 || ((S3_PDEV S3_FAR *)source)->pdType != 0 ? 0
+                   : (S3_U16)((const S3_BITMAP16 S3_FAR *)source)->bmBitsPixel);
     return (S3_I16)(ok ? 1 : 0);
 }
 

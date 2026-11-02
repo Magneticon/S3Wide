@@ -117,6 +117,18 @@ StretchBlt to 1x, +10 and +37 rows, for 122x100, 122x450, 640x200 and
 all rows correct at both depths. Paintbrush at 1280x720x32 on `svga_s3`
 then matches the 8-bpp S3 rendering except the palette approximations.
 
+Follow-up (owner): with that build Word's stripes were gone, but its
+toolbar faces, ruler and Tip of the Day background came out black. The row
+rule itself was checked against Microsoft's VGA.DRV with `DIBROWS.EXE`
+(`tests/win16/display_dibrows_probe.c`): SetDIBits/GetDIBits with DIB
+heights above and below the bitmap's, with and without start scans. VGA.DRV
+and the new S3WIDE place every row identically (the DIB's top is bitmap row
+0; rows outside the bitmap are dropped); the old S3WIDE did not. Shrinking
+StretchBlt follows GDI's default BLACKONWHITE mode (rows ANDed), as
+expected. Word's remaining black areas are not reproduced with the programs
+on hand; a tracing build (dib.skip and blit-source events) went to the
+owner to capture Word's calls.
+
 ## Windows Setup (OEMSETUP.INF)
 
 `package/OEMSETUP.INF` (written by `package/make_oemsetup.py`) offers 39

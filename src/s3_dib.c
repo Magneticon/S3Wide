@@ -1,5 +1,6 @@
 #include "s3_dib.h"
 #include "s3_pixel.h"
+#include "s3_trace.h"
 #include "s3_copy.h"
 #if !defined(S3_HOST_TEST)
 #include <i86.h>
@@ -491,6 +492,7 @@ S3_U16 S3_DibBitmapBits(void S3_FAR *bitmap, S3_U16 get, S3_U16 start,
         if ((S3_U32)start + scan >= format.height) break;
         y = (S3_I16)(format.height - 1 - (start + scan));
         if ((S3_U16)y >= target.height) {
+            S3_TRACE_EVENT("dib.skip", (S3_U16)(start + scan), target.height);
             ++done;
             continue;
         }

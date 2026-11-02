@@ -142,10 +142,10 @@ static void run(HDC screen, int w, int h)
     /* Through the screen: BitBlt and StretchBlt (GDI simulates stretching
        through DIBs). Destination row j should show source row j * h / dh. */
     {
-        static const int heights[3] = {0, 10, 37};
+        static const int heights[6] = {0, 10, 37, -10, -37, -1};
         int k, dh, j, src_y;
-        for (k = 0; k < 3; ++k) {
-            dh = h + heights[k];
+        for (k = 0; k < 6; ++k) {
+            dh = heights[k] == -1 ? h / 2 : h + heights[k];
             if (k == 0) BitBlt(screen, 0, 0, w, h, dc, 0, 0, SRCCOPY);
             else StretchBlt(screen, 0, 0, w, dh, dc, 0, 0, w, h, SRCCOPY);
             bad_rows = 0;
@@ -155,6 +155,7 @@ static void run(HDC screen, int w, int h)
                 c = GetPixel(screen, 2, j);
                 if (!close_enough(c, expected(2, src_y), bytes_pixel) &&
                     (src_y + 1 >= h || !close_enough(c, expected(2, src_y + 1), bytes_pixel)) &&
+                    (src_y + 2 >= h || !close_enough(c, expected(2, src_y + 2), bytes_pixel)) &&
                     (src_y == 0 || !close_enough(c, expected(2, src_y - 1), bytes_pixel))) {
                     if (first_bad < 0) first_bad = j;
                     ++bad_rows;
