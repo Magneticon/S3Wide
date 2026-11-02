@@ -111,6 +111,12 @@ the 320x200 mode doubled) shows the circle taller than wide; stretched to
 16:9 as a full-screen 16:9 display does (`as-16x9.png`) it is round, with
 the colour bars and frame edges at the screen edges.
 
-Not tested here: MCIAVI itself and the owner's Indeo 4 film (this machine
-has no Video for Windows runtime); the cursor guard with the mouse moving
-during playback; real hardware.
+Owner's test (2026-11-02, live WfW 3.11 with Video for Windows and the
+Indeo 4 codec, DOSBox-X `machine=svga_s3`, full screen 1920x1080,
+`aspect=false`): Media Player's Full Screen through this DLL shows a
+320x180 (16:9) Indeo 4.1 film filling the screen, and a 320x144 (2.22:1)
+film at 1920x864 with 108-pixel bars at the top and bottom, the shape the
+film has. With Microsoft's DISPDIB.DLL the same film came out about 2.96:1.
+
+Not tested: the cursor guard with the mouse moving during playback; real
+hardware.
