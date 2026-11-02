@@ -1,4 +1,5 @@
 #include "s3_text.h"
+#include "s3_pixel.h"
 #if !defined(S3_HOST_TEST)
 #include <i86.h>
 #endif
@@ -107,16 +108,12 @@ static S3_I16 s3_advance(const S3_FONT S3_FAR *font, S3_U8 c, S3_I16 i,
     return advance;
 }
 
-static S3_U8 s3_target_color(const S3_TARGET S3_FAR *target, S3_U32 physical)
+/* A physical colour in target row format. */
+static S3_U32 s3_target_color(const S3_TARGET S3_FAR *target, S3_U32 physical)
 {
-    S3_U8 index = (S3_U8)physical;
-    S3_U16 red, green, blue;
-    if (target->kind != S3_TARGET_MEM1) return index;
-    red = (S3_U16)((index >> 5) & 7);
-    green = (S3_U16)((index >> 2) & 7);
-    blue = (S3_U16)(index & 3);
-    return (S3_U8)((red * 300U / 7U + green * 590U / 7U + blue * 110U / 3U) >= 500U
-                   ? 0xFF : 0x00);
+    S3_U32 pixel = S3_PhysicalToPixel(physical);
+    if (target->kind != S3_TARGET_MEM1) return pixel;
+    return S3_PixelIsLight(pixel) ? 0xFF : 0x00;
 }
 
 static void s3_intersect(S3_I16 S3_FAR *left, S3_I16 S3_FAR *top,
@@ -131,11 +128,12 @@ static void s3_intersect(S3_I16 S3_FAR *left, S3_I16 S3_FAR *top,
 }
 
 static int s3_fill_rows(const S3_TARGET S3_FAR *target, S3_I16 left, S3_I16 top,
-                        S3_I16 right, S3_I16 bottom, S3_U8 color)
+                        S3_I16 right, S3_I16 bottom, S3_U32 color)
 {
-    S3_I16 i, y;
+    S3_I16 y;
     if (left >= right) return 1;
-    for (i = 0; i < right - left; ++i) s3_text_row[i] = color;
+    if (right - left > S3_TEXT_ROW_MAX) return 0;
+    S3_FillPixels(s3_text_row, color, (S3_U16)(right - left), target->bytes_pixel);
     for (y = top; y < bottom; ++y) {
         if (!S3_TargetWriteRow(target, left, y, (S3_U16)(right - left), s3_text_row)) {
             return 0;
@@ -155,8 +153,9 @@ S3_U32 S3_TextOut(void S3_FAR *device, S3_I16 x, S3_I16 y,
     S3_TARGET target;
     S3_I16 i, extent = 0, break_err, row_y, px, glyph_x, left, top, right, bottom;
     S3_I16 cell_left, cell_right;
-    S3_U16 index, width, column_bytes;
-    S3_U8 fg, bg, bits;
+    S3_U16 index, width, column_bytes, bp;
+    S3_U32 fg, bg;
+    S3_U8 bits;
     const S3_U8 S3_FAR *glyph;
     int opaque;
 
@@ -173,6 +172,7 @@ S3_U32 S3_TextOut(void S3_FAR *device, S3_I16 x, S3_I16 y,
         return ((S3_U32)font.height << 16) | (S3_U16)extent;
     }
     if (!S3_BindTarget(device, &target)) return 0;
+    bp = target.bytes_pixel;
 
     left = 0;
     top = 0;
@@ -206,7 +206,7 @@ S3_U32 S3_TextOut(void S3_FAR *device, S3_I16 x, S3_I16 y,
         for (row_y = (S3_I16)(y > top ? y : top);
              row_y < (S3_I16)(y + (S3_I16)font.height) && row_y < bottom; ++row_y) {
             if (opaque) {
-                for (i = 0; i < cell_right - cell_left; ++i) s3_text_row[i] = bg;
+                S3_FillPixels(s3_text_row, bg, (S3_U16)(cell_right - cell_left), bp);
             } else if (!S3_TargetReadRow(&target, cell_left, row_y,
                                          (S3_U16)(cell_right - cell_left), s3_text_row)) {
                 return 0;
@@ -223,7 +223,7 @@ S3_U32 S3_TextOut(void S3_FAR *device, S3_I16 x, S3_I16 y,
                     if (sx < cell_left || sx >= cell_right) continue;
                     bits = glyph[(S3_U16)(px >> 3) * column_bytes + (S3_U16)(row_y - y)];
                     if (bits & (0x80U >> (px & 7))) {
-                        s3_text_row[sx - cell_left] = fg;
+                        S3_PixelStore(s3_text_row + (S3_U16)(sx - cell_left) * bp, fg, bp);
                     }
                 }
                 glyph_x = (S3_I16)(glyph_x + s3_advance(&font, text[i], i, char_widths,

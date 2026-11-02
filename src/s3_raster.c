@@ -1,4 +1,5 @@
 #include "s3_raster.h"
+#include "s3_pixel.h"
 #include "s3_trace.h"
 #include <string.h>
 #if !defined(S3_HOST_TEST)
@@ -22,6 +23,7 @@ int S3_BindTarget(void S3_FAR *device, S3_TARGET S3_FAR *target)
     const S3_BITMAP16 S3_FAR *bitmap = (const S3_BITMAP16 S3_FAR *)device;
     S3_SURFACE S3_FAR *surface;
     S3_U32 bytes;
+    S3_U16 stride, height;
 
     if (device == (void S3_FAR *)0 || target == (S3_TARGET S3_FAR *)0) {
         return 0;
@@ -33,65 +35,105 @@ int S3_BindTarget(void S3_FAR *device, S3_TARGET S3_FAR *target)
         target->width = surface->width;
         target->height = surface->height;
         target->stride = surface->pitch;
+        target->bytes_pixel = surface->bytes_pixel ? surface->bytes_pixel : 1;
+        target->segment_index = 0;
+        target->scan_segment = 0;
         target->surface = surface;
         target->bits = (S3_U8 S3_FAR *)0;
         return 1;
     }
     if (bitmap->bmType != 0 || bitmap->bmWidth <= 0 || bitmap->bmHeight <= 0 ||
         bitmap->bmWidthBytes <= 0 || bitmap->bmPlanes != 1 ||
-        bitmap->bmBits == (S3_U8 S3_FAR *)0 || bitmap->bmSegmentIndex != 0) {
+        bitmap->bmBits == (S3_U8 S3_FAR *)0) {
         return 0;
     }
-    bytes = (S3_U32)(S3_U16)bitmap->bmWidthBytes * (S3_U32)(S3_U16)bitmap->bmHeight;
-    if (bytes > 65536UL) return 0;
-#if !defined(S3_HOST_TEST)
-    if (!S3_FarSpanFitsSingleSegment((S3_U16)FP_OFF(bitmap->bmBits), bytes)) {
-        return 0;
-    }
+    stride = (S3_U16)bitmap->bmWidthBytes;
+    height = (S3_U16)bitmap->bmHeight;
+    if (bitmap->bmSegmentIndex != 0) {
+        /* Huge bitmap: each segment holds bmScanSegment whole rows. */
+        if (bitmap->bmScanSegment <= 0 ||
+            (S3_U32)(S3_U16)bitmap->bmScanSegment * stride > 65536UL) {
+            return 0;
+        }
+#if defined(S3_HOST_TEST)
+        return 0; /* host tests use flat single-segment bitmaps */
 #endif
-    if (bitmap->bmBitsPixel == 8 && bitmap->bmWidthBytes >= bitmap->bmWidth) {
-        target->kind = S3_TARGET_MEM8;
+    } else {
+        bytes = (S3_U32)stride * height;
+        if (bytes > 65536UL) return 0;
+#if !defined(S3_HOST_TEST)
+        if (!S3_FarSpanFitsSingleSegment((S3_U16)FP_OFF(bitmap->bmBits), bytes)) {
+            return 0;
+        }
+#endif
+    }
+    if (bitmap->bmBitsPixel == s3_mode.bits_pixel &&
+        (S3_U32)stride >= (S3_U32)(S3_U16)bitmap->bmWidth * s3_mode.bytes_pixel) {
+        target->kind = S3_TARGET_MEMC;
+        target->bytes_pixel = s3_mode.bytes_pixel;
     } else if (bitmap->bmBitsPixel == 1 &&
-               (S3_U32)(S3_U16)bitmap->bmWidthBytes * 8UL >=
-               (S3_U32)(S3_U16)bitmap->bmWidth) {
+               (S3_U32)stride * 8UL >= (S3_U32)(S3_U16)bitmap->bmWidth) {
         target->kind = S3_TARGET_MEM1;
+        target->bytes_pixel = 1;
     } else {
         return 0;
     }
     target->width = (S3_U16)bitmap->bmWidth;
-    target->height = (S3_U16)bitmap->bmHeight;
-    target->stride = (S3_U16)bitmap->bmWidthBytes;
+    target->height = height;
+    target->stride = stride;
+    target->segment_index = (S3_U16)bitmap->bmSegmentIndex;
+    target->scan_segment = (S3_U16)bitmap->bmScanSegment;
     target->surface = (S3_SURFACE S3_FAR *)0;
     target->bits = bitmap->bmBits;
     return 1;
+}
+
+/* First byte of row y of a memory target. */
+static S3_U8 S3_FAR *s3_mem_row(const S3_TARGET S3_FAR *target, S3_U16 y)
+{
+#if !defined(S3_HOST_TEST)
+    if (target->segment_index != 0) {
+        S3_U16 segment = (S3_U16)(y / target->scan_segment);
+        S3_U16 within = (S3_U16)(y % target->scan_segment);
+        return (S3_U8 S3_FAR *)MK_FP(
+            FP_SEG(target->bits) + segment * target->segment_index,
+            FP_OFF(target->bits) + within * target->stride);
+    }
+    return target->bits + (S3_U16)(y * target->stride);
+#else
+    return target->bits + (S3_U32)y * target->stride;
+#endif
 }
 
 int S3_TargetReadRow(const S3_TARGET S3_FAR *target, S3_I16 x, S3_I16 y,
                      S3_U16 count, S3_U8 S3_FAR *out)
 {
     S3_U8 S3_FAR *span;
-    S3_U16 contiguous, run, i, column;
+    const S3_U8 S3_FAR *row;
+    S3_U16 contiguous, run, i, column, bp = target->bytes_pixel;
 
     switch (target->kind) {
     case S3_TARGET_SCREEN:
         while (count != 0) {
             span = S3_SurfaceSpan(target->surface, x, y, &contiguous);
             if (span == (S3_U8 S3_FAR *)0) return 0;
-            run = contiguous < count ? contiguous : count;
-            s3_fmemcpy(out, span, run);
-            out += run;
+            run = (S3_U16)(contiguous / bp);
+            if (run > count) run = count;
+            if (run == 0) return 0;
+            s3_fmemcpy(out, span, run * bp);
+            out += run * bp;
             x = (S3_I16)(x + run);
             count = (S3_U16)(count - run);
         }
         return 1;
-    case S3_TARGET_MEM8:
-        s3_fmemcpy(out, target->bits + (S3_U16)y * target->stride + (S3_U16)x, count);
+    case S3_TARGET_MEMC:
+        s3_fmemcpy(out, s3_mem_row(target, (S3_U16)y) + (S3_U16)x * bp, count * bp);
         return 1;
     case S3_TARGET_MEM1:
+        row = s3_mem_row(target, (S3_U16)y);
         for (i = 0; i < count; ++i) {
             column = (S3_U16)(x + i);
-            out[i] = (target->bits[(S3_U16)y * target->stride + (column >> 3)] &
-                      (0x80U >> (column & 7))) ? 0xFF : 0x00;
+            out[i] = (row[column >> 3] & (0x80U >> (column & 7))) ? 0xFF : 0x00;
         }
         return 1;
     default:
@@ -103,8 +145,8 @@ int S3_TargetWriteRow(const S3_TARGET S3_FAR *target, S3_I16 x, S3_I16 y,
                       S3_U16 count, const S3_U8 S3_FAR *in)
 {
     S3_U8 S3_FAR *span;
-    S3_U8 S3_FAR *byte;
-    S3_U16 contiguous, run, i, column;
+    S3_U8 S3_FAR *row;
+    S3_U16 contiguous, run, i, column, bp = target->bytes_pixel;
     S3_U8 bit;
 
     switch (target->kind) {
@@ -112,25 +154,27 @@ int S3_TargetWriteRow(const S3_TARGET S3_FAR *target, S3_I16 x, S3_I16 y,
         while (count != 0) {
             span = S3_SurfaceSpan(target->surface, x, y, &contiguous);
             if (span == (S3_U8 S3_FAR *)0) return 0;
-            run = contiguous < count ? contiguous : count;
-            s3_fmemcpy(span, in, run);
-            in += run;
+            run = (S3_U16)(contiguous / bp);
+            if (run > count) run = count;
+            if (run == 0) return 0;
+            s3_fmemcpy(span, in, run * bp);
+            in += run * bp;
             x = (S3_I16)(x + run);
             count = (S3_U16)(count - run);
         }
         return 1;
-    case S3_TARGET_MEM8:
-        s3_fmemcpy(target->bits + (S3_U16)y * target->stride + (S3_U16)x, in, count);
+    case S3_TARGET_MEMC:
+        s3_fmemcpy(s3_mem_row(target, (S3_U16)y) + (S3_U16)x * bp, in, count * bp);
         return 1;
     case S3_TARGET_MEM1:
+        row = s3_mem_row(target, (S3_U16)y);
         for (i = 0; i < count; ++i) {
             column = (S3_U16)(x + i);
-            byte = target->bits + (S3_U16)y * target->stride + (column >> 3);
             bit = (S3_U8)(0x80U >> (column & 7));
             if (in[i] & 0x80) {
-                *byte = (S3_U8)(*byte | bit);
+                row[column >> 3] = (S3_U8)(row[column >> 3] | bit);
             } else {
-                *byte = (S3_U8)(*byte & (S3_U8)~bit);
+                row[column >> 3] = (S3_U8)(row[column >> 3] & (S3_U8)~bit);
             }
         }
         return 1;
@@ -139,31 +183,43 @@ int S3_TargetWriteRow(const S3_TARGET S3_FAR *target, S3_I16 x, S3_I16 y,
     }
 }
 
-S3_U8 S3_Rop3(S3_U8 rop, S3_U8 pattern, S3_U8 source, S3_U8 destination)
+S3_U32 S3_Rop3Long(S3_U8 rop, S3_U32 pattern, S3_U32 source,
+                   S3_U32 destination)
 {
-    S3_U8 p = pattern, s = source, d = destination, result = 0;
-    S3_U8 np = (S3_U8)~p, ns = (S3_U8)~s, nd = (S3_U8)~d;
+    S3_U32 p = pattern, s = source, d = destination, result = 0;
+    S3_U32 np = ~p, ns = ~s, nd = ~d;
 
-    if (rop & 0x01) result |= (S3_U8)(np & ns & nd);
-    if (rop & 0x02) result |= (S3_U8)(np & ns & d);
-    if (rop & 0x04) result |= (S3_U8)(np & s & nd);
-    if (rop & 0x08) result |= (S3_U8)(np & s & d);
-    if (rop & 0x10) result |= (S3_U8)(p & ns & nd);
-    if (rop & 0x20) result |= (S3_U8)(p & ns & d);
-    if (rop & 0x40) result |= (S3_U8)(p & s & nd);
-    if (rop & 0x80) result |= (S3_U8)(p & s & d);
+    if (rop & 0x01) result |= np & ns & nd;
+    if (rop & 0x02) result |= np & ns & d;
+    if (rop & 0x04) result |= np & s & nd;
+    if (rop & 0x08) result |= np & s & d;
+    if (rop & 0x10) result |= p & ns & nd;
+    if (rop & 0x20) result |= p & ns & d;
+    if (rop & 0x40) result |= p & s & nd;
+    if (rop & 0x80) result |= p & s & d;
     return result;
 }
 
-/* 3:3:2 index to monochrome: white when the colour is at least half bright. */
-static S3_U8 s3_index_to_mono(S3_U8 index)
+S3_U8 S3_Rop3(S3_U8 rop, S3_U8 pattern, S3_U8 source, S3_U8 destination)
 {
-    S3_U16 red = (S3_U16)((index >> 5) & 7);
-    S3_U16 green = (S3_U16)((index >> 2) & 7);
-    S3_U16 blue = (S3_U16)(index & 3);
-    /* Weights 30/59/11 scaled to each channel's range (7, 7, 3). */
-    S3_U16 luma = (S3_U16)(red * 300U / 7U + green * 590U / 7U + blue * 110U / 3U);
-    return (S3_U8)(luma >= 500U ? 0xFF : 0x00);
+    return (S3_U8)S3_Rop3Long(rop, pattern, source, destination);
+}
+
+void S3_FillPixels(S3_U8 S3_FAR *out, S3_U32 pixel, S3_U16 count,
+                   S3_U16 bytes_pixel)
+{
+    S3_U16 done;
+    if (count == 0) return;
+    if (bytes_pixel == 1) {
+        s3_fmemset(out, (S3_U8)pixel, count);
+        return;
+    }
+    /* Store one pixel, then double the filled prefix. */
+    S3_PixelStore(out, pixel, bytes_pixel);
+    for (done = 1; done < count; done = (S3_U16)(done * 2)) {
+        S3_U16 n = (S3_U16)(count - done < done ? count - done : done);
+        s3_fmemcpy(out + done * bytes_pixel, out, n * bytes_pixel);
+    }
 }
 
 static int s3_clip(S3_I16 S3_FAR *dx, S3_I16 S3_FAR *dy,
@@ -189,28 +245,42 @@ static int s3_clip(S3_I16 S3_FAR *dx, S3_I16 S3_FAR *dy,
     return *width > 0 && *height > 0;
 }
 
-/* Solid PATCOPY on the screen: fill spans directly. */
-static int s3_fill_screen(const S3_TARGET S3_FAR *target, S3_I16 x, S3_I16 y,
-                          S3_I16 width, S3_I16 height, S3_U8 color)
+/* Constant fill: one prepared row copied into every row of the rectangle. */
+static int s3_fill_rows(const S3_TARGET S3_FAR *target, S3_I16 x, S3_I16 y,
+                        S3_I16 width, S3_I16 height, S3_U32 pixel)
 {
-    S3_I16 row;
-    S3_U16 count, contiguous, run;
-    S3_I16 column;
-    S3_U8 S3_FAR *span;
-
-    for (row = 0; row < height; ++row) {
-        column = x;
-        count = (S3_U16)width;
-        while (count != 0) {
-            span = S3_SurfaceSpan(target->surface, column, (S3_I16)(y + row), &contiguous);
-            if (span == (S3_U8 S3_FAR *)0) return 0;
-            run = contiguous < count ? contiguous : count;
-            s3_fmemset(span, color, run);
-            column = (S3_I16)(column + run);
-            count = (S3_U16)(count - run);
+    S3_I16 row, chunk_x, chunk;
+    for (chunk_x = 0; chunk_x < width; chunk_x = (S3_I16)(chunk_x + S3_ROW_MAX)) {
+        chunk = (S3_I16)(width - chunk_x);
+        if (chunk > S3_ROW_MAX) chunk = S3_ROW_MAX;
+        S3_FillPixels(s3_dst_row, pixel, (S3_U16)chunk, target->bytes_pixel);
+        for (row = 0; row < height; ++row) {
+            if (!S3_TargetWriteRow(target, (S3_I16)(x + chunk_x), (S3_I16)(y + row),
+                                   (S3_U16)chunk, s3_dst_row)) return 0;
         }
     }
     return 1;
+}
+
+/* Convert a source row between monochrome (one byte per pixel) and colour
+   (bp bytes per pixel, the colour side's size) target formats, in place. Mono 1 = background,
+   0 = text colour; colour -> mono is 1 where the pixel is the background. */
+static void s3_convert_source(S3_U16 src_kind, S3_U16 dst_kind, S3_U16 count,
+                              S3_U16 bp, S3_U32 background, S3_U32 foreground)
+{
+    S3_I16 i;
+    if (src_kind == S3_TARGET_MEM1 && dst_kind != S3_TARGET_MEM1) {
+        /* Expanding: walk backwards so unread bytes are not overwritten. */
+        for (i = (S3_I16)count - 1; i >= 0; --i) {
+            S3_PixelStore(s3_src_row + (S3_U16)i * bp,
+                          s3_src_row[i] ? background : foreground, bp);
+        }
+    } else if (src_kind != S3_TARGET_MEM1 && dst_kind == S3_TARGET_MEM1) {
+        for (i = 0; i < (S3_I16)count; ++i) {
+            s3_src_row[i] = (S3_U8)(S3_PixelLoad(s3_src_row + (S3_U16)i * bp, bp) ==
+                                    background ? 0xFF : 0x00);
+        }
+    }
 }
 
 int S3_RasterBitBlt(void S3_FAR *destination, S3_I16 dx, S3_I16 dy,
@@ -224,10 +294,12 @@ int S3_RasterBitBlt(void S3_FAR *destination, S3_I16 dx, S3_I16 dy,
     int use_p = (((rop >> 4) ^ rop) & 0x0F) != 0;
     int use_s = (((rop >> 2) ^ rop) & 0x33) != 0;
     int use_d = (((rop >> 1) ^ rop) & 0x55) != 0;
-    S3_U8 background = 0xFF, foreground = 0x00;
+    S3_U32 background, foreground, p, s, d;
     S3_I16 row, first_row, step, i, chunk_x, chunk;
     S3_I16 ty, sy_row;
-    S3_U8 p, s;
+    S3_U16 bp;
+    int plain_copy;
+    S3_U8 S3_FAR *dp;
 
     if (!S3_BindTarget(destination, &dst)) return 0;
     if (use_s && !S3_BindTarget(source, &src)) return 0;
@@ -243,16 +315,19 @@ int S3_RasterBitBlt(void S3_FAR *destination, S3_I16 dx, S3_I16 dy,
         if (brush == (const S3_PBRUSH16 S3_FAR *)0) return 0;
         if (brush->style == S3_BS_HOLLOW) return 1;
     }
+    background = S3_RGBToPixel(0x00FFFFFFUL);
+    foreground = S3_RGBToPixel(0);
     if (mode != (const S3_DRAWMODE16 S3_FAR *)0) {
-        background = (S3_U8)mode->bkColor;
-        foreground = (S3_U8)mode->TextColor;
+        background = S3_PhysicalToPixel(mode->bkColor);
+        foreground = S3_PhysicalToPixel(mode->TextColor);
     }
+    bp = dst.bytes_pixel;
 
     /* Constant results and solid pattern fills avoid the per-pixel path. */
-    if (!use_s && !use_d && dst.kind == S3_TARGET_SCREEN &&
-        (!use_p || brush->style == S3_BS_SOLID)) {
+    if (!use_s && !use_d && (!use_p || brush->style == S3_BS_SOLID)) {
         p = use_p ? brush->color[0] : 0;
-        return s3_fill_screen(&dst, dx, dy, width, height, S3_Rop3(rop, p, 0, 0));
+        if (dst.kind == S3_TARGET_MEM1) p = S3_PixelIsLight(p) ? 0xFF : 0x00;
+        return s3_fill_rows(&dst, dx, dy, width, height, S3_Rop3Long(rop, p, 0, 0));
     }
 
     /* Overlapping copies within one target must read rows before they are
@@ -265,6 +340,8 @@ int S3_RasterBitBlt(void S3_FAR *destination, S3_I16 dx, S3_I16 dy,
         first_row = (S3_I16)(height - 1);
         step = -1;
     }
+    plain_copy = rop == 0xCC && use_s &&
+                 (src.kind == S3_TARGET_MEM1) == (dst.kind == S3_TARGET_MEM1);
 
     for (chunk_x = 0; chunk_x < width; chunk_x = (S3_I16)(chunk_x + S3_ROW_MAX)) {
         chunk = (S3_I16)(width - chunk_x);
@@ -275,27 +352,30 @@ int S3_RasterBitBlt(void S3_FAR *destination, S3_I16 dx, S3_I16 dy,
                 sy_row = (S3_I16)(sy + row);
                 if (!S3_TargetReadRow(&src, (S3_I16)(sx + chunk_x), sy_row,
                                       (S3_U16)chunk, s3_src_row)) return 0;
-                if (src.kind == S3_TARGET_MEM1 && dst.kind != S3_TARGET_MEM1) {
-                    for (i = 0; i < chunk; ++i)
-                        s3_src_row[i] = s3_src_row[i] ? background : foreground;
-                } else if (src.kind != S3_TARGET_MEM1 && dst.kind == S3_TARGET_MEM1) {
-                    for (i = 0; i < chunk; ++i)
-                        s3_src_row[i] = (S3_U8)(s3_src_row[i] == background ? 0xFF : 0x00);
+                if (plain_copy) {
+                    if (!S3_TargetWriteRow(&dst, (S3_I16)(dx + chunk_x), ty,
+                                           (S3_U16)chunk, s3_src_row)) return 0;
+                    continue;
                 }
+                s3_convert_source(src.kind, dst.kind, (S3_U16)chunk,
+                                  src.kind == S3_TARGET_MEM1 ? bp : src.bytes_pixel,
+                                  background, foreground);
             }
             if (use_d) {
                 if (!S3_TargetReadRow(&dst, (S3_I16)(dx + chunk_x), ty,
                                       (S3_U16)chunk, s3_dst_row)) return 0;
             }
-            for (i = 0; i < chunk; ++i) {
+            dp = s3_dst_row;
+            for (i = 0; i < chunk; ++i, dp += bp) {
                 p = 0;
                 if (use_p) {
                     p = brush->color[(((S3_U16)ty & 7) << 3) |
                                      ((S3_U16)(dx + chunk_x + i) & 7)];
-                    if (dst.kind == S3_TARGET_MEM1) p = s3_index_to_mono(p);
+                    if (dst.kind == S3_TARGET_MEM1) p = S3_PixelIsLight(p) ? 0xFF : 0x00;
                 }
-                s = use_s ? s3_src_row[i] : 0;
-                s3_dst_row[i] = S3_Rop3(rop, p, s, use_d ? s3_dst_row[i] : 0);
+                s = use_s ? S3_PixelLoad(s3_src_row + (S3_U16)i * bp, bp) : 0;
+                d = use_d ? S3_PixelLoad(dp, bp) : 0;
+                S3_PixelStore(dp, S3_Rop3Long(rop, p, s, d), bp);
             }
             if (!S3_TargetWriteRow(&dst, (S3_I16)(dx + chunk_x), ty,
                                    (S3_U16)chunk, s3_dst_row)) return 0;

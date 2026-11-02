@@ -21,6 +21,8 @@ void S3_VbeDecodeModeInfo(const S3_U8 S3_FAR *raw, S3_U16 vbe_version,
     info->bits_pixel = raw[0x19];
     info->memory_model = raw[0x1B];
     info->red_mask_size = raw[0x1F];
+    info->red_position = raw[0x20];
+    info->green_mask_size = raw[0x21];
     info->lfb_physical = s3_get32(raw + 0x28);
     /* VBE 3.0 reports the linear-mode pitch separately. */
     if (vbe_version >= 0x0300 && s3_get16(raw + 0x32) != 0) {
@@ -43,9 +45,11 @@ int S3_VbeModeMatches(const S3_VBE_MODE_INFO S3_FAR *info, S3_U16 width,
         return info->memory_model == S3_VBE_MODEL_PACKED;
     case 16:
         return info->memory_model == S3_VBE_MODEL_DIRECT &&
-               info->red_mask_size == 5;
+               info->red_mask_size == 5 && info->red_position == 11 &&
+               info->green_mask_size == 6;
     case 32:
-        return info->memory_model == S3_VBE_MODEL_DIRECT;
+        return info->memory_model == S3_VBE_MODEL_DIRECT &&
+               info->red_mask_size == 8 && info->red_position == 16;
     }
     return 0;
 }

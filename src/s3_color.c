@@ -1,4 +1,5 @@
 #include "s3_abi.h"
+#include "s3_pixel.h"
 #include "s3_trace.h"
 
 #define S3_INDEX_MARKER 0xFF000000UL
@@ -75,10 +76,108 @@ int S3_ColorIndexToRGB(S3_U8 index, S3_U32 S3_FAR *rgb_out)
     return 1;
 }
 
+S3_U32 S3_PixelLoad(const S3_U8 S3_FAR *p, S3_U16 bytes_pixel)
+{
+    switch (bytes_pixel) {
+    case 2:
+        return (S3_U32)p[0] | ((S3_U32)p[1] << 8);
+    case 4:
+        return (S3_U32)p[0] | ((S3_U32)p[1] << 8) | ((S3_U32)p[2] << 16) |
+               ((S3_U32)p[3] << 24);
+    default:
+        return p[0];
+    }
+}
+
+void S3_PixelStore(S3_U8 S3_FAR *p, S3_U32 pixel, S3_U16 bytes_pixel)
+{
+    p[0] = (S3_U8)pixel;
+    if (bytes_pixel >= 2) p[1] = (S3_U8)(pixel >> 8);
+    if (bytes_pixel == 4) {
+        p[2] = (S3_U8)(pixel >> 16);
+        p[3] = (S3_U8)(pixel >> 24);
+    }
+}
+
+S3_U32 S3_RGBToPixel(S3_U32 rgb)
+{
+    S3_U16 red = (S3_U16)(rgb & 0xFF), green = (S3_U16)((rgb >> 8) & 0xFF);
+    S3_U16 blue = (S3_U16)((rgb >> 16) & 0xFF);
+    S3_U8 index = 0;
+    switch (s3_mode.bytes_pixel) {
+    case 2:
+        return ((S3_U32)(red >> 3) << 11) | ((S3_U32)(green >> 2) << 5) |
+               (S3_U32)(blue >> 3);
+    case 4:
+        return ((S3_U32)red << 16) | ((S3_U32)green << 8) | blue;
+    default:
+        (void)S3_RGBToColorIndex(rgb & 0x00FFFFFFUL, &index);
+        return index;
+    }
+}
+
+S3_U32 S3_PixelToRGB(S3_U32 pixel)
+{
+    S3_U32 rgb = 0;
+    S3_U16 red, green, blue;
+    switch (s3_mode.bytes_pixel) {
+    case 2:
+        /* Replicate the top bits so full scale maps to 255. */
+        red = (S3_U16)((pixel >> 11) & 0x1F);
+        green = (S3_U16)((pixel >> 5) & 0x3F);
+        blue = (S3_U16)(pixel & 0x1F);
+        red = (S3_U16)((red << 3) | (red >> 2));
+        green = (S3_U16)((green << 2) | (green >> 4));
+        blue = (S3_U16)((blue << 3) | (blue >> 2));
+        return (S3_U32)red | ((S3_U32)green << 8) | ((S3_U32)blue << 16);
+    case 4:
+        return ((pixel >> 16) & 0xFF) | (pixel & 0xFF00UL) |
+               ((pixel & 0xFF) << 16);
+    default:
+        (void)S3_ColorIndexToRGB((S3_U8)pixel, &rgb);
+        return rgb;
+    }
+}
+
+S3_U32 S3_PhysicalToPixel(S3_U32 physical)
+{
+    switch (s3_mode.bytes_pixel) {
+    case 2:
+        return physical & 0xFFFFUL;
+    case 4:
+        return physical & 0x00FFFFFFUL;
+    default:
+        return physical & 0xFFUL;
+    }
+}
+
+S3_U32 S3_PixelToPhysical(S3_U32 pixel)
+{
+    return s3_mode.bytes_pixel == 1 ? S3_INDEX_MARKER | (pixel & 0xFF)
+                                    : S3_PhysicalToPixel(pixel);
+}
+
+int S3_PixelIsLight(S3_U32 pixel)
+{
+    S3_U32 rgb = S3_PixelToRGB(pixel);
+    S3_U32 luma = (rgb & 0xFF) * 30UL + ((rgb >> 8) & 0xFF) * 59UL +
+                  ((rgb >> 16) & 0xFF) * 11UL;
+    return luma >= 12750UL; /* half of 255 * 100 */
+}
+
 S3_U32 S3_ColorInfoCore(S3_U32 color_in, S3_U32 S3_FAR *physical_out)
 {
     S3_U8 index;
-    S3_U32 rgb;
+    S3_U32 rgb, pixel;
+    if (s3_mode.bytes_pixel != 1) {
+        /* Direct colour: physical colours are pixel values. */
+        if (physical_out == (S3_U32 S3_FAR *)0) {
+            return S3_PixelToRGB(S3_PhysicalToPixel(color_in));
+        }
+        pixel = S3_RGBToPixel(color_in & 0x00FFFFFFUL);
+        *physical_out = pixel;
+        return S3_PixelToRGB(pixel);
+    }
     if ((color_in & S3_INDEX_MARKER) == S3_INDEX_MARKER) {
         index = (S3_U8)color_in;
         if (physical_out != (S3_U32 S3_FAR *)0) {

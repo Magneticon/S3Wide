@@ -24,7 +24,7 @@ int S3_OutputScanlines(void S3_FAR *destination, S3_U16 count,
 
 /* OS_POLYLINE with a solid one-pixel pen, any Rop2, on any target. */
 int S3_OutputPolyline(void S3_FAR *destination, S3_U16 count,
-                      const S3_POINT16 S3_FAR *points, S3_U8 color,
+                      const S3_POINT16 S3_FAR *points, S3_U32 physical,
                       S3_I16 rop2, const S3_RECT16 S3_FAR *clip);
 
 #endif

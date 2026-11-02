@@ -1,4 +1,5 @@
 #include "s3_dib.h"
+#include "s3_pixel.h"
 #if !defined(S3_HOST_TEST)
 #include <i86.h>
 /* KERNEL's selector increment for walking huge (> 64 KiB) memory. */
@@ -9,7 +10,7 @@ extern void S3_FAR S3_PASCAL __AHINCR(void);
 
 static S3_U8 S3_FAR_DATA s3_dib_row[S3_ROW_BYTES_MAX];
 static S3_U8 S3_FAR_DATA s3_device_row[S3_ROW_BYTES_MAX];
-static S3_U8 s3_table_index[256];
+static S3_U32 s3_table_pixel[256];
 static S3_U8 s3_table_mono[256];
 
 /* The 16 VGA colours, used to pick indices when GetDIBits asks for 4 bpp. */
@@ -112,42 +113,53 @@ static void s3_build_tables(const S3_BITMAPINFO16 S3_FAR *info,
     const S3_RGBQUAD16 S3_FAR *quad;
     for (i = 0; i < format->colors; ++i) {
         quad = &info->bmiColors[i];
-        s3_table_index[i] = s3_rgb_to_index(quad->rgbRed, quad->rgbGreen, quad->rgbBlue);
+        s3_table_pixel[i] = S3_RGBToPixel((S3_U32)quad->rgbRed |
+                                          ((S3_U32)quad->rgbGreen << 8) |
+                                          ((S3_U32)quad->rgbBlue << 16));
         s3_table_mono[i] = s3_rgb_to_mono(quad->rgbRed, quad->rgbGreen, quad->rgbBlue);
     }
 }
 
 /* Convert one DIB scan (already in s3_dib_row) to target format. */
 static void s3_dib_to_target(const S3_DIB_FORMAT S3_FAR *format, S3_U16 kind,
-                             S3_U16 count)
+                             S3_U16 count, S3_U16 bp)
 {
     S3_U16 i, value;
-    const S3_U8 *table = kind == S3_TARGET_MEM1 ? s3_table_mono : s3_table_index;
+    S3_U32 pixel;
+    int mono = kind == S3_TARGET_MEM1;
+    S3_U8 S3_FAR *out = s3_device_row;
     for (i = 0; i < count; ++i) {
         switch (format->bits) {
         case 1:
             value = (s3_dib_row[i >> 3] >> (7 - (i & 7))) & 1;
-            s3_device_row[i] = table[value];
             break;
         case 4:
             value = (i & 1) ? (s3_dib_row[i >> 1] & 0x0F) : (s3_dib_row[i >> 1] >> 4);
-            s3_device_row[i] = table[value];
             break;
         case 8:
-            s3_device_row[i] = table[s3_dib_row[i]];
+            value = s3_dib_row[i];
             break;
         default: /* 24 bpp: B, G, R */
-            if (kind == S3_TARGET_MEM1) {
-                s3_device_row[i] = s3_rgb_to_mono(s3_dib_row[i * 3 + 2],
-                                                  s3_dib_row[i * 3 + 1],
-                                                  s3_dib_row[i * 3]);
-            } else {
-                s3_device_row[i] = s3_rgb_to_index(s3_dib_row[i * 3 + 2],
-                                                   s3_dib_row[i * 3 + 1],
-                                                   s3_dib_row[i * 3]);
-            }
+            value = 0;
             break;
         }
+        if (format->bits == 24) {
+            S3_U8 red = s3_dib_row[i * 3 + 2], green = s3_dib_row[i * 3 + 1];
+            S3_U8 blue = s3_dib_row[i * 3];
+            if (mono) {
+                *out++ = s3_rgb_to_mono(red, green, blue);
+                continue;
+            }
+            pixel = S3_RGBToPixel((S3_U32)red | ((S3_U32)green << 8) |
+                                  ((S3_U32)blue << 16));
+        } else if (mono) {
+            *out++ = s3_table_mono[value];
+            continue;
+        } else {
+            pixel = s3_table_pixel[value];
+        }
+        S3_PixelStore(out, pixel, bp);
+        out += bp;
     }
 }
 
@@ -172,7 +184,7 @@ static S3_U8 s3_nearest_vga16(S3_U32 rgb)
 
 /* Convert one target row (s3_device_row) into DIB format in s3_dib_row. */
 static void s3_target_to_dib(const S3_DIB_FORMAT S3_FAR *format, S3_U16 kind,
-                             S3_U16 count)
+                             S3_U16 count, S3_U16 bp)
 {
     S3_U16 i;
     S3_U32 rgb;
@@ -184,7 +196,7 @@ static void s3_target_to_dib(const S3_DIB_FORMAT S3_FAR *format, S3_U16 kind,
         if (kind == S3_TARGET_MEM1) {
             rgb = s3_device_row[i] ? 0x00FFFFFFUL : 0;
         } else {
-            (void)S3_ColorIndexToRGB(s3_device_row[i], &rgb);
+            rgb = S3_PixelToRGB(S3_PixelLoad(s3_device_row + i * bp, bp));
         }
         switch (format->bits) {
         case 1:
@@ -196,8 +208,11 @@ static void s3_target_to_dib(const S3_DIB_FORMAT S3_FAR *format, S3_U16 kind,
             s3_dib_row[i >> 1] |= (S3_U8)((i & 1) ? value : (value << 4));
             break;
         case 8:
+            /* The colour table is the 8-bpp colour cube at every depth. */
             s3_dib_row[i] = kind == S3_TARGET_MEM1 ? (S3_U8)(s3_device_row[i] ? 0xFF : 0)
-                                                   : s3_device_row[i];
+                                                   : s3_rgb_to_index((S3_U8)rgb,
+                                                                     (S3_U8)(rgb >> 8),
+                                                                     (S3_U8)(rgb >> 16));
             break;
         default:
             s3_dib_row[i * 3] = (S3_U8)(rgb >> 16);
@@ -259,11 +274,11 @@ S3_U16 S3_DibBitmapBits(void S3_FAR *bitmap, S3_U16 get, S3_U16 start,
         y = (S3_I16)(target.height - 1 - (start + scan));
         if (get) {
             if (!S3_TargetReadRow(&target, 0, y, count, s3_device_row)) break;
-            s3_target_to_dib(&format, target.kind, count);
+            s3_target_to_dib(&format, target.kind, count, target.bytes_pixel);
             s3_dib_scan(bits, (S3_U32)scan * format.stride, s3_dib_row, row_bytes, 1);
         } else {
             s3_dib_scan(bits, (S3_U32)scan * format.stride, s3_dib_row, row_bytes, 0);
-            s3_dib_to_target(&format, target.kind, count);
+            s3_dib_to_target(&format, target.kind, count, target.bytes_pixel);
             if (!S3_TargetWriteRow(&target, 0, y, count, s3_device_row)) break;
         }
         ++done;
@@ -309,9 +324,10 @@ S3_U16 S3_DibToDevice(void S3_FAR *device, S3_I16 x, S3_I16 y,
         if (row_y < top || row_y >= bottom) continue;
         s3_dib_scan((S3_U8 S3_FAR *)bits, (S3_U32)scan * format.stride, s3_dib_row,
                     (S3_U16)format.stride, 0);
-        s3_dib_to_target(&format, target.kind, (S3_U16)(first + count));
+        s3_dib_to_target(&format, target.kind, (S3_U16)(first + count),
+                         target.bytes_pixel);
         if (!S3_TargetWriteRow(&target, left, row_y, (S3_U16)count,
-                               s3_device_row + first)) {
+                               s3_device_row + (S3_U16)first * target.bytes_pixel)) {
             return 0;
         }
     }

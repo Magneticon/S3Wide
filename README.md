@@ -6,7 +6,39 @@ Experimental Windows 3.1/3.11 display-driver project targeting native widescreen
 
 Implement **1280x720 at 8 bpp (256 colours)** while preserving the existing Windows 3.1 S3 Trio64 modes and, where practical, S3 acceleration.
 
-This project is deliberately **not** a generic VESA-driver project. VESA implementations such as `vbesvga.drv` are valuable references and diagnostic fallbacks, but the target is an S3-specific accelerated driver.
+The S3-specific path remains the primary target on S3 hardware. On 2026-11-01 the owner decided to add a second backend inside the same driver: a VESA linear-framebuffer path for resolutions and colour depths the S3 cannot reach (up to 3840x2160 at 16M colours on DOSBox-X's own `svga_dosbox` card). See [the VESA backend notes](docs/research/20261101-vbe-backend/README.md).
+
+## Choosing a mode
+
+`S3WIDE.DRV` reads its mode from `SYSTEM.INI`:
+
+```ini
+[boot]
+display.drv=s3wide.drv
+
+[s3wide.drv]
+Width=3840
+Height=2160
+Depth=32
+```
+
+`Depth` is 8, 16 (5:6:5) or 32. Without a `[s3wide.drv]` section the driver uses 1280x720x8. On an S3 Trio64 that native mode is programmed directly (S3 registers, hardware cursor); every other request is served through the VESA BIOS and needs an exact linear-framebuffer mode of that size and depth. If none exists, the driver keeps 1280x720x8 on S3 hardware and otherwise refuses to start (restore `display.drv=vga.drv` from DOS).
+
+DOSBox-X settings for the VESA backend:
+
+```ini
+[dosbox]
+machine=svga_dosbox
+
+[video]
+# 3840x2160x32 needs 33 MB; 1920x1080x32 fits in 8 MB
+vmemsize=64
+vesa modelist width limit=0
+vesa modelist height limit=0
+allow high definition vesa modes=true
+```
+
+The emulated S3 cards (`svga_s3*`) report at most 16 MB and list modes up to 1920x1440, so they cannot provide 4K.
 
 ## Target environment
 

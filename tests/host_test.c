@@ -13,6 +13,9 @@
 #include "s3_text.h"
 #include "s3_output.h"
 #include "s3_cursor.h"
+#include "s3_mode.h"
+#include "s3_pixel.h"
+#include "s3_swcursor.h"
 
 static int failures;
 
@@ -486,11 +489,12 @@ static void test_gdi_bitmap_and_pixel_path(void)
     draw_mode.Rop2 = S3_R2_COPYPEN;
     CHECK(Pixel(&pdev, 0, 0, 0xFF00002AUL, &draw_mode) == 1);
     CHECK(context.vram[0] == 0x2A);
-    draw_mode.Rop2 = 7;
+    draw_mode.Rop2 = 7; /* R2_XORPEN */
+    CHECK(Pixel(&pdev, 0, 0, 0xFF000055UL, &draw_mode) == 1);
+    CHECK(context.vram[0] == (0x2A ^ 0x55));
+    draw_mode.Rop2 = 0;
     CHECK(Pixel(&pdev, 0, 0, 0xFF000055UL, &draw_mode) == S3_PIXEL_ERROR);
-    CHECK(context.vram[0] == 0x2A);
     draw_mode.Rop2 = S3_R2_COPYPEN;
-    CHECK(Pixel(&pdev, 0, 0, 0x00000055UL, &draw_mode) == S3_PIXEL_ERROR);
     CHECK(Pixel(&pdev, 6, 0, 0, (void *)0) == S3_PIXEL_ERROR);
 
     bitmap.bmSegmentIndex = 1;
@@ -2249,6 +2253,146 @@ static void test_system_colors_exact(void)
     CHECK(S3_RGBToColorIndex(0xC0C0C0UL, &index) && index == 0xB6);
 }
 
+/* 16 and 32 bpp: colour conversion, fills, mono expansion, DIBs, cursor. */
+static void test_direct_colour_depths(void)
+{
+    BANK_TEST_CONTEXT context;
+    S3_SURFACE surface;
+    S3_PDEV pdev;
+    S3_U8 initial_window[64];
+    S3_LBRUSH16 logical;
+    S3_PBRUSH16 brush;
+    S3_DRAWMODE16 mode;
+    S3_BITMAP16 mono, bitmap;
+    S3_U8 mono_bits[2 * 4];
+    S3_U8 device_bits[3 * 4 * 2];
+    S3_U8 dib24[2 * 12];
+    struct {
+        S3_BITMAPINFOHEADER16 header;
+        S3_RGBQUAD16 colors[256];
+    } info;
+    struct {
+        S3_CURSORSHAPE16 header;
+        S3_U8 masks[2 * 32 * 4];
+    } shape;
+    S3_SWCURSOR cursor;
+    S3_U32 physical = 0;
+    S3_U8 *p;
+
+    /* 16 bpp 5:6:5. */
+    CHECK(S3_ModeSetVBE(&s3_mode, 640, 480, 16, 1280, 0x111, 0xE0000000UL));
+    CHECK(S3_RGBToPixel(0x00FFFFFFUL) == 0xFFFF);
+    CHECK(S3_RGBToPixel(0x000080FFUL) == 0xFC00);  /* R 255, G 128 */
+    CHECK(S3_PixelToRGB(0xFFFF) == 0x00FFFFFFUL);
+    CHECK(S3_PixelToRGB(0) == 0);
+    CHECK(S3_ColorInfoCore(0x00FFFFFFUL, &physical) == 0x00FFFFFFUL && physical == 0xFFFF);
+
+    /* 32 bpp 0x00RRGGBB on a 6x5 screen, pitch 32, in 64-byte banks. */
+    CHECK(S3_ModeSetVBE(&s3_mode, 6, 5, 32, 32, 0x112, 0xE0000000UL));
+    CHECK(s3_mode.bytes_pixel == 4 && s3_mode.framebuffer_bytes == 160);
+    CHECK(S3_ColorInfoCore(0x00336699UL, &physical) == 0x00336699UL);
+    CHECK(physical == 0x00996633UL);
+    CHECK(S3_ColorInfoCore(physical, (S3_U32 *)0) == 0x00336699UL);
+    CHECK(S3_PixelIsLight(0x00FFFFFFUL) && !S3_PixelIsLight(0x00000080UL));
+
+    memset(&context, 0, sizeof(context));
+    memset(context.vram, 0x11, sizeof(context.vram));
+    memset(initial_window, 0, sizeof(initial_window));
+    context.fail_bank = 0xFFFFFFFFUL;
+    CHECK(S3_SurfaceInit(&surface, 6, 5, 32, 160, 64, 64,
+                         initial_window, &context, test_map_bank));
+    surface.bytes_pixel = 4;
+    CHECK(S3_InitializePDEV(&pdev));
+    CHECK(pdev.bits_pixel == 32 && pdev.pitch == 32);
+    pdev.surface_state = &surface;
+
+    /* Solid red PATCOPY: pixels are B, G, R, 0 in memory. */
+    memset(&logical, 0, sizeof(logical));
+    logical.lbStyle = S3_BS_SOLID;
+    logical.lbColor = 0x000000FFUL;
+    CHECK(S3_RealizeBrush(&logical, &brush));
+    CHECK(brush.color[0] == 0x00FF0000UL);
+    CHECK(BitBlt(&pdev, 1, 1, (void *)0, 0, 0, 2, 2, 0x00F00021L, &brush, (void *)0));
+    p = context.vram + 1 * 32 + 4;
+    CHECK(p[0] == 0 && p[1] == 0 && p[2] == 0xFF && p[3] == 0);
+    CHECK(context.vram[1 * 32 + 8 + 2] == 0xFF && context.vram[2 * 32 + 4 + 2] == 0xFF);
+    CHECK(context.vram[1 * 32 + 12 + 2] == 0x11 && context.vram[0] == 0x11);
+    /* DSTINVERT inverts all four bytes of a pixel. */
+    CHECK(BitBlt(&pdev, 1, 1, (void *)0, 0, 0, 1, 1, 0x00550009L, (void *)0, (void *)0));
+    CHECK(p[0] == 0xFF && p[1] == 0xFF && p[2] == 0x00 && p[3] == 0xFF);
+
+    /* Mono to colour: 1 = background (white), 0 = text colour (blue). */
+    memset(&mono, 0, sizeof(mono));
+    memset(mono_bits, 0, sizeof(mono_bits));
+    mono_bits[0] = 0xA0;
+    mono.bmWidth = 4;
+    mono.bmHeight = 4;
+    mono.bmWidthBytes = 2;
+    mono.bmPlanes = 1;
+    mono.bmBitsPixel = 1;
+    mono.bmBits = mono_bits;
+    memset(&mode, 0, sizeof(mode));
+    mode.bkColor = 0x00FFFFFFUL;
+    mode.TextColor = 0x000000FFUL;
+    CHECK(BitBlt(&pdev, 0, 3, &mono, 0, 0, 4, 1, (S3_I32)S3_ROP3_SRCCOPY,
+                 (void *)0, &mode));
+    p = context.vram + 3 * 32;
+    CHECK(S3_PixelLoad(p, 4) == 0x00FFFFFFUL && S3_PixelLoad(p + 4, 4) == 0x000000FFUL);
+    CHECK(S3_PixelLoad(p + 8, 4) == 0x00FFFFFFUL && S3_PixelLoad(p + 12, 4) == 0x000000FFUL);
+    /* And back: colour to mono is 1 where the pixel is the background. */
+    memset(mono_bits, 0, sizeof(mono_bits));
+    CHECK(BitBlt(&mono, 0, 1, &pdev, 0, 3, 4, 1, (S3_I32)S3_ROP3_SRCCOPY,
+                 (void *)0, &mode));
+    CHECK(mono_bits[2] == 0xA0);
+
+    /* A 24-bpp DIB into a 32-bpp memory bitmap and back. */
+    memset(&info, 0, sizeof(info));
+    info.header.biSize = sizeof(S3_BITMAPINFOHEADER16);
+    info.header.biWidth = 3;
+    info.header.biHeight = 2;
+    info.header.biPlanes = 1;
+    info.header.biBitCount = 24;
+    memset(&bitmap, 0, sizeof(bitmap));
+    memset(device_bits, 0x55, sizeof(device_bits));
+    bitmap.bmWidth = 3;
+    bitmap.bmHeight = 2;
+    bitmap.bmWidthBytes = 12;
+    bitmap.bmPlanes = 1;
+    bitmap.bmBitsPixel = 32;
+    bitmap.bmBits = device_bits;
+    memset(dib24, 0, sizeof(dib24));
+    dib24[0] = 0x12; dib24[1] = 0x34; dib24[2] = 0x56;  /* bottom-left */
+    CHECK(S3_DibBitmapBits(&bitmap, 0, 0, 2, dib24, (S3_BITMAPINFO16 *)&info) == 2);
+    CHECK(S3_PixelLoad(device_bits + 12, 4) == 0x00563412UL);
+    memset(dib24, 0xAA, sizeof(dib24));
+    CHECK(S3_DibBitmapBits(&bitmap, 1, 0, 2, dib24, (S3_BITMAPINFO16 *)&info) == 2);
+    CHECK(dib24[0] == 0x12 && dib24[1] == 0x34 && dib24[2] == 0x56);
+
+    /* Software cursor: AND 0 / XOR 1 at the hot spot draws white over the
+       screen, and erasing restores every byte. */
+    memset(&shape, 0, sizeof(shape));
+    shape.header.csWidth = 32;
+    shape.header.csHeight = 32;
+    shape.header.csWidthBytes = 4;
+    memset(shape.masks, 0xFF, 32 * 4);        /* AND: transparent */
+    shape.masks[0] = 0x7F;                    /* pixel (0,0): AND 0 */
+    shape.masks[32 * 4] = 0x80;               /* pixel (0,0): XOR 1 */
+    p = context.vram + 4 * 32 + 8;            /* pixel (2, 4) */
+    S3_PixelStore(p, 0x00123456UL, 4);        /* before the cursor exists */
+    S3_SwCursorInit(&cursor, &surface);
+    CHECK(S3_SwCursorSetShape(&cursor, &shape.header));
+    S3_SwCursorMove(&cursor, 2, 4);
+    CHECK(S3_PixelLoad(p, 4) == 0xFFFFFFFFUL);
+    S3_SwCursorExclude(&cursor);
+    CHECK(S3_PixelLoad(p, 4) == 0x00123456UL);
+    S3_SwCursorMove(&cursor, 3, 4);           /* deferred while excluded */
+    CHECK(S3_PixelLoad(p + 4, 4) != 0xFFFFFFFFUL);
+    S3_SwCursorUnexclude(&cursor);
+    CHECK(S3_PixelLoad(p, 4) == 0x00123456UL && S3_PixelLoad(p + 4, 4) == 0xFFFFFFFFUL);
+
+    S3_ModeDefault(&s3_mode);
+}
+
 int main(void)
 {
     test_full_vga_bridge_snapshot();
@@ -2258,6 +2402,7 @@ int main(void)
     test_realized_pen_and_output_polyline();
     test_realized_brushes();
     test_raster_rop3_and_targets();
+    test_direct_colour_depths();
     test_dib_conversions();
     test_raster_text();
     test_output_scanlines();

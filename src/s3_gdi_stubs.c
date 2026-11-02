@@ -5,6 +5,7 @@
 #include "s3_raster.h"
 #include "s3_dib.h"
 #include "s3_output.h"
+#include "s3_pixel.h"
 #if !defined(S3_HOST_TEST)
 #include <i86.h>
 #endif
@@ -98,15 +99,18 @@ static S3_U16 s3_output_body(void S3_FAR *destination,
     pen = (S3_PPEN16 S3_FAR *)physical_pen;
     if (pen->style == S3_LS_NOLINE || pen->width.x < 0) return 1;
     if (pen->style != S3_LS_SOLID || pen->width.x > 1 ||
-        (pen->color & 0xFFFFFF00UL) != 0xFF000000UL) {
+        (s3_mode.bytes_pixel == 1 &&
+         (pen->color & 0xFFFFFF00UL) != 0xFF000000UL)) {
         return S3_DDA_NOT_SUPPORTED;
     }
     mode = (S3_DRAWMODE16 S3_FAR *)draw_mode;
     surface = s3_device_surface(destination);
-    if (surface == (S3_SURFACE S3_FAR *)0 || mode->Rop2 != S3_R2_COPYPEN) {
-        /* Memory bitmaps and other pen ROPs: generic per-pixel path. */
+    if (surface == (S3_SURFACE S3_FAR *)0 || mode->Rop2 != S3_R2_COPYPEN ||
+        surface->bytes_pixel != 1) {
+        /* Memory bitmaps, other pen ROPs and direct colour: generic
+           per-pixel path. */
         return (S3_U16)(S3_OutputPolyline(destination, point_count, points,
-                                          (S3_U8)pen->color, mode->Rop2,
+                                          pen->color, mode->Rop2,
                                           clip_rect) ? 1 : 0);
     }
 
@@ -193,7 +197,8 @@ S3_U32 S3_FAR S3_PASCAL RealizeObject(S3_PDEV S3_FAR *device,
         return 0;
     }
     (void)S3_ColorInfoCore(logical_pen->lopnColor, &physical_color);
-    if ((physical_color & 0xFFFFFF00UL) != 0xFF000000UL) return 0;
+    if (s3_mode.bytes_pixel == 1 &&
+        (physical_color & 0xFFFFFF00UL) != 0xFF000000UL) return 0;
     if (physical_object == (void S3_FAR *)0) return (S3_U32)sizeof(S3_PPEN16);
     if (!s3_far_pointer_span_fits(physical_object, sizeof(S3_PPEN16))) return 0;
 
@@ -219,22 +224,38 @@ static S3_U32 s3_pixel_body(void S3_FAR *destination,
                                S3_U16 x, S3_U16 y, S3_U32 physical_color,
                                void S3_FAR *draw_mode)
 {
-    S3_SURFACE S3_FAR *surface = s3_device_surface(destination);
-    S3_U8 index;
+    S3_TARGET target;
+    S3_U8 pixel[4];
+    S3_U8 rop;
+    S3_U16 bp;
+    S3_U32 value, pen;
     S3_TRACE_EVENT("Pixel", 0, 0);
-    if (surface == (S3_SURFACE S3_FAR *)0 || x > 32767U || y > 32767U) {
+    if (!S3_BindTarget(destination, &target) ||
+        x >= target.width || y >= target.height) {
         return S3_PIXEL_ERROR;
     }
-    if (draw_mode == (void S3_FAR *)0) {
-        if (!S3_SurfaceGetPixel(surface, (S3_I16)x, (S3_I16)y, &index)) {
-            return S3_PIXEL_ERROR;
-        }
-        return 0xFF000000UL | (S3_U32)index;
+    bp = target.bytes_pixel;
+    if (!S3_TargetReadRow(&target, (S3_I16)x, (S3_I16)y, 1, pixel)) {
+        return S3_PIXEL_ERROR;
     }
-    if (((S3_DRAWMODE16 S3_FAR *)draw_mode)->Rop2 != S3_R2_COPYPEN ||
-        (physical_color & 0xFFFFFF00UL) != 0xFF000000UL ||
-        !S3_SurfacePutPixel(surface, (S3_I16)x, (S3_I16)y,
-                            (S3_U8)physical_color)) {
+    value = target.kind == S3_TARGET_MEM1
+            ? S3_RGBToPixel(pixel[0] ? 0x00FFFFFFUL : 0)
+            : S3_PixelLoad(pixel, bp);
+    if (draw_mode == (void S3_FAR *)0) {
+        return S3_PixelToPhysical(value);
+    }
+    rop = S3_Rop2ToRop3(((S3_DRAWMODE16 S3_FAR *)draw_mode)->Rop2);
+    if (rop == 0xFF && ((S3_DRAWMODE16 S3_FAR *)draw_mode)->Rop2 != 16) {
+        return S3_PIXEL_ERROR;
+    }
+    pen = S3_PhysicalToPixel(physical_color);
+    if (target.kind == S3_TARGET_MEM1) {
+        pen = S3_PixelIsLight(pen) ? 0xFF : 0x00;
+        pixel[0] = (S3_U8)S3_Rop3Long(rop, pen, 0, pixel[0]);
+    } else {
+        S3_PixelStore(pixel, S3_Rop3Long(rop, pen, 0, value), bp);
+    }
+    if (!S3_TargetWriteRow(&target, (S3_I16)x, (S3_I16)y, 1, pixel)) {
         return S3_PIXEL_ERROR;
     }
     return 1;
@@ -268,8 +289,9 @@ static S3_U16 s3_setdibitstodevice_body(
     (void)draw_mode;
 
     /* Without a translate table (non-palette device) the DIB carries RGB
-       colours: convert any 1/4/8/24-bpp DIB through the generic DIB path. */
-    if (translate == (S3_I16 S3_FAR *)0) {
+       colours: convert any 1/4/8/24-bpp DIB through the generic DIB path.
+       Direct-colour modes always take it. */
+    if (translate == (S3_I16 S3_FAR *)0 || s3_mode.bytes_pixel != 1) {
         return S3_DibToDevice(destination, (S3_I16)x, (S3_I16)y, scan_start,
                               scan_count, clip_rect, dib_bits, bitmap_info);
     }

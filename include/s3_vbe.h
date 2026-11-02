@@ -12,6 +12,8 @@ typedef struct S3_VBE_MODE_INFO {
     S3_U16 bits_pixel;
     S3_U16 memory_model;
     S3_U16 red_mask_size;
+    S3_U16 red_position;
+    S3_U16 green_mask_size;
     S3_U16 pitch;            /* linear pitch where VBE 3 reports one */
     S3_U32 lfb_physical;
 } S3_VBE_MODE_INFO;
@@ -28,7 +30,8 @@ void S3_VbeDecodeModeInfo(const S3_U8 S3_FAR *raw, S3_U16 vbe_version,
 
 /* Nonzero when a decoded mode is a linear-framebuffer graphics mode of
    exactly width x height x bits_pixel that this driver can draw:
-   8 bpp packed, 16 bpp 5:6:5 direct, or 32 bpp direct. */
+   8 bpp packed, 16 bpp 5:6:5 direct (red at bit 11), or 32 bpp direct
+   with red at bit 16 (0x00RRGGBB). */
 int S3_VbeModeMatches(const S3_VBE_MODE_INFO S3_FAR *info, S3_U16 width,
                       S3_U16 height, S3_U16 bits_pixel);
 

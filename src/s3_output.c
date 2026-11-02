@@ -1,4 +1,5 @@
 #include "s3_output.h"
+#include "s3_pixel.h"
 
 #define S3_OUTPUT_ROW_MAX S3_ROW_PIXELS_MAX
 
@@ -19,13 +20,9 @@ S3_U8 S3_Rop2ToRop3(S3_I16 rop2)
     return rop3;
 }
 
-static S3_U8 s3_mono(S3_U8 index)
+static S3_U32 s3_mono(S3_U32 pixel)
 {
-    S3_U16 red = (S3_U16)((index >> 5) & 7);
-    S3_U16 green = (S3_U16)((index >> 2) & 7);
-    S3_U16 blue = (S3_U16)(index & 3);
-    return (S3_U8)((red * 300U / 7U + green * 590U / 7U + blue * 110U / 3U) >= 500U
-                   ? 0xFF : 0x00);
+    return S3_PixelIsLight(pixel) ? 0xFF : 0x00;
 }
 
 static int s3_clip_rect(const S3_TARGET S3_FAR *target,
@@ -57,8 +54,10 @@ int S3_OutputScanlines(void S3_FAR *destination, S3_U16 count,
     S3_PBRUSH16 pen_brush;
     S3_U8 rop;
     S3_I16 left, top, right, bottom, y, xs, xe, x;
-    S3_U16 i, k;
-    S3_U8 p, mask;
+    S3_U16 i, k, bp;
+    S3_U32 p, pen_pixel;
+    S3_U8 mask;
+    S3_U8 S3_FAR *at;
     int transparent;
 
     if (points == (const S3_POINT16 S3_FAR *)0 || count < 1 ||
@@ -72,7 +71,8 @@ int S3_OutputScanlines(void S3_FAR *destination, S3_U16 count,
         if (pen == (const S3_PPEN16 S3_FAR *)0) return 0;
         pen_brush.style = S3_BS_SOLID;
         pen_brush.has_mask = 0;
-        for (k = 0; k < sizeof(pen_brush.color); ++k) pen_brush.color[k] = (S3_U8)pen->color;
+        pen_pixel = S3_PhysicalToPixel(pen->color);
+        for (k = 0; k < S3_BRUSH_SIZE * S3_BRUSH_SIZE; ++k) pen_brush.color[k] = pen_pixel;
         for (k = 0; k < sizeof(pen_brush.mask); ++k) pen_brush.mask[k] = 0xFF;
         brush = &pen_brush;
     }
@@ -81,6 +81,7 @@ int S3_OutputScanlines(void S3_FAR *destination, S3_U16 count,
     y = points[0].y;
     if (y < top || y >= bottom) return 1;
     transparent = brush->has_mask && mode->bkMode == 1; /* TRANSPARENT */
+    bp = target.bytes_pixel;
 
     for (i = 1; i < count; ++i) {
         xs = points[i].x;
@@ -104,7 +105,8 @@ int S3_OutputScanlines(void S3_FAR *destination, S3_U16 count,
             if (!(mask & (0x80U >> ((S3_U16)x & 7)))) continue;
             p = brush->color[(((S3_U16)y & 7) << 3) | ((S3_U16)x & 7)];
             if (target.kind == S3_TARGET_MEM1) p = s3_mono(p);
-            s3_span_row[x - xs] = S3_Rop3(rop, p, 0, s3_span_row[x - xs]);
+            at = s3_span_row + (S3_U16)(x - xs) * bp;
+            S3_PixelStore(at, S3_Rop3Long(rop, p, 0, S3_PixelLoad(at, bp)), bp);
         }
         if (!S3_TargetWriteRow(&target, xs, y, (S3_U16)(xe - xs), s3_span_row)) return 0;
     }
@@ -113,21 +115,23 @@ int S3_OutputScanlines(void S3_FAR *destination, S3_U16 count,
 
 typedef struct S3_ROP_PLOT {
     S3_TARGET target;
-    S3_U8 color;
+    S3_U32 color;
     S3_U8 rop;
 } S3_ROP_PLOT;
 
 static int s3_rop_plot(void S3_FAR *context, S3_I16 x, S3_I16 y)
 {
     S3_ROP_PLOT S3_FAR *plot = (S3_ROP_PLOT S3_FAR *)context;
-    S3_U8 pixel;
-    if (!S3_TargetReadRow(&plot->target, x, y, 1, &pixel)) return 0;
-    pixel = S3_Rop3(plot->rop, plot->color, 0, pixel);
-    return S3_TargetWriteRow(&plot->target, x, y, 1, &pixel);
+    S3_U8 pixel[4];
+    S3_U16 bp = plot->target.bytes_pixel;
+    if (!S3_TargetReadRow(&plot->target, x, y, 1, pixel)) return 0;
+    S3_PixelStore(pixel, S3_Rop3Long(plot->rop, plot->color, 0,
+                                     S3_PixelLoad(pixel, bp)), bp);
+    return S3_TargetWriteRow(&plot->target, x, y, 1, pixel);
 }
 
 int S3_OutputPolyline(void S3_FAR *destination, S3_U16 count,
-                      const S3_POINT16 S3_FAR *points, S3_U8 color,
+                      const S3_POINT16 S3_FAR *points, S3_U32 physical,
                       S3_I16 rop2, const S3_RECT16 S3_FAR *clip)
 {
     S3_ROP_PLOT plot;
@@ -140,7 +144,8 @@ int S3_OutputPolyline(void S3_FAR *destination, S3_U16 count,
     }
     plot.rop = S3_Rop2ToRop3(rop2);
     if (plot.rop == 0xFF && rop2 != 16) return 0;
-    plot.color = plot.target.kind == S3_TARGET_MEM1 ? s3_mono(color) : color;
+    plot.color = S3_PhysicalToPixel(physical);
+    if (plot.target.kind == S3_TARGET_MEM1) plot.color = s3_mono(plot.color);
     if (!s3_clip_rect(&plot.target, clip, &left, &top, &right, &bottom)) return 1;
     for (i = 1; i < count; ++i) {
         if (!S3_LineVisit(points[i - 1].x, points[i - 1].y, points[i].x, points[i].y,
