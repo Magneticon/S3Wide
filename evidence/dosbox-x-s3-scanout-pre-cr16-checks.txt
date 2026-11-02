@@ -1,8 +1,0 @@
-DOSBox-X screenshot pixel checks (integration screenshot route; no Windows guest)
-
-VBE baseline: 1280x720 host capture; 64 unique RGB colors; green levels [0, 36, 73, 109, 146, 182, 219, 255]; top-left RGB (0, 0, 0); SHA-256 459a55e93a9a27135041bbee602266fbc67ac43585dc27572dc0b1a0c5622846.
-Cold-start candidate: 1280x613 host capture; 56 unique RGB colors; green levels [36, 73, 109, 146, 182, 219, 255]; top-left RGB (0, 36, 0); SHA-256 cfb606cb27bb765132a9369d625e2c441c1251471ad09b3b133194683528b13c.
-VBE-seeded candidate: 1280x613 host capture; 56 unique RGB colors; same missing first green level and top-left RGB as cold-start candidate; SHA-256 cfb606cb27bb765132a9369d625e2c441c1251471ad09b3b133194683528b13c.
-Cold-start and VBE-seeded candidate PNGs are pixel-identical. The candidate CRTC CR07/CR12 fields encode 720 active display lines, while DOSBox-X's host capture is aspect-corrected to 613 rows. The visible pattern therefore has a missing top green band and is not a 1280x720 capture acceptance.
-
-Guest register/memory log: ../tests/dosbox-x/S3COLD.TXT and S3RAW.TXT. Both cold and VBE-seeded helper gates pass rollback, timing/pitch checks (VBE-seeded), bank mapping, and 921,600-byte framebuffer readback. This does not establish Windows GDI acceptance.

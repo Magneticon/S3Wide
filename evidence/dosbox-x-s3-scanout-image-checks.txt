@@ -1,9 +1,0 @@
-DOSBox-X screenshot pixel checks (integration screenshot route; no Windows guest)
-
-All five current captures are 1280x720, have 64 unique RGB colors and green levels [0, 36, 73, 109, 146, 182, 219, 255], and match the expected RGB332 pixel formula at every coordinate. They are pixel-identical with SHA-256 `459a55e93a9a27135041bbee602266fbc67ac43585dc27572dc0b1a0c5622846`:
-
-- `dosbox-x-s3-raw-vbe-reference.png` — VBE 0x023E reference.
-- `dosbox-x-s3-raw-candidate-visible.png` and `dosbox-x-s3-raw-candidate-confirmation.png` — VBE-seeded candidate and delayed confirmation.
-- `dosbox-x-s3-cold-visible-pattern.png` and `dosbox-x-s3-cold-visible-pattern-confirmation.png` — cold-start candidate and delayed confirmation.
-
-The archived `*-pre-cr16-613.png` images preserve the earlier 1280x613/56-color failure. CR15=`0xD0` with CR09[5] starts vertical blank at line 720; CR16=`0x6A` made the pinned DOSBox-X renderer calculate a 107-line wrap skip. CR16=`0xFF` changes that modeled skip to zero. Guest register/memory logs are `../tests/dosbox-x/S3COLD.TXT` and `S3RAW.TXT`. Both cold and VBE-seeded helper gates pass rollback, timing/pitch checks (VBE-seeded), bank mapping, and 921,600-byte framebuffer readback. This emulator scanout result does not establish Windows GDI acceptance.
