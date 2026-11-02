@@ -1,0 +1,16 @@
+system windows dll initinstance memory
+option oneautodata
+option map=build/dispdib.map
+option quiet
+file build/dispdib.obj
+file build/dd_libentry.obj
+name build/DISPDIB.DLL
+option modname=DISPDIB
+option description 'DISPDIB: widescreen full-screen video (S3Wide)'
+option heapsize=1024
+export DISPLAYDIB.1=DisplayDib
+export DISPLAYDIBEX.2=DisplayDibEx
+export WEP.99=WEP resident
+import Death GDI.121
+import Resurrection GDI.122
+import LockCurrentTask KERNEL.33

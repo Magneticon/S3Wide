@@ -21,6 +21,9 @@ S3WIDE.DRV    the driver
 OEMSETUP.INF  lets Windows Setup install it and list its modes
 VBEMODES.EXE  DOS tool that lists the VESA modes of this machine and says
               which ones S3WIDE.DRV can use (s3wide=yes)
+DISPDIB.DLL   optional replacement for Video for Windows' full-screen
+              display DLL that keeps 16:9 films 16:9 (see "Pictures and
+              video"); our own code, not Microsoft's
 INSTALL.TXT   this file
 SHA256.TXT    checksums of the files
 VGA.3GR, VGALOGO.LGO, VGALOGO.RLE, VGASYS.FON, VGAFIX.FON, VGAOEM.FON,
@@ -128,11 +131,44 @@ GIF need a viewer program that understands them; Windows 3.1 itself does
 not. Video (AVI) needs Microsoft Video for Windows. Play it in a window
 (Media Player, Device, Configure: Window) and maximize or size the window:
 the driver stretches the frames itself in your desktop mode and colours.
-Video for Windows' "Full Screen" option switches to a 4:3 320x240 VGA mode
-in 256 colours, bypassing the driver; a 16:9 film is then letterboxed
-inside a 4:3 picture. In 256-colour mode the driver
-uses a fixed colour set (no palette changes), so photos look coarser
-than at 16 or 32 bpp.
+In 256-colour mode the driver uses a fixed colour set (no palette
+changes), so photos look coarser than at 16 or 32 bpp.
+
+Full-screen video
+-----------------
+Video for Windows' "Full Screen" option (Media Player, Device, Configure)
+is the fast way to play: it hands each frame to DISPDIB.DLL, which
+switches the card to a small 256-colour mode (320x200 or 320x240) and
+leaves the scaling to the monitor or the emulator. Microsoft's DISPDIB.DLL
+lays the film out for a 4:3 screen, so on a 16:9 screen (DOSBox-X full
+screen with aspect=false, a widescreen monitor) a 16:9 film comes out
+stretched to about 21:9.
+
+The DISPDIB.DLL in this package lays the film out for a 16:9 screen
+instead: a 16:9 film fills the screen at its own shape, a 4:3 film gets
+black bars at the sides. It uses the smallest 256-colour VESA mode that
+holds the film at its full size (320x200 for a 320x180 film), so it is as
+fast as the original. It works with any display driver.
+
+To install it:
+1. In WINDOWS\SYSTEM keep Microsoft's file:
+       CD \WINDOWS\SYSTEM
+       COPY DISPDIB.DLL DISPDIB.MS
+2. Close Media Player and other video programs (or exit Windows), then
+   copy DISPDIB.DLL from this package into WINDOWS\SYSTEM.
+3. Play a film and choose Full Screen. Esc or a click stops it as before.
+To go back, copy DISPDIB.MS over DISPDIB.DLL.
+
+Settings (optional), in SYSTEM.INI:
+    [dispdib]
+    Aspect=16:9    shape of your screen (default). Use Aspect=4:3 for a 4:3
+                   monitor or DOSBox-X with aspect=true, Aspect=16:10 for a
+                   16:10 screen, Aspect=0 to keep the mode's pixels square
+    Width=1280     use this mode instead of the smallest one (with Height;
+    Height=720     slower, larger modes cost more per frame)
+    Log=1          write the calls it gets to C:\DISPDIB.LOG
+The shape is right on a full-screen display; a DOSBox-X window takes the
+shape of the video mode unless its size is fixed.
 
 Known limits
 ------------

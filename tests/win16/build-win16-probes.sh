@@ -8,6 +8,7 @@
 #   build/DIBROWS.EXE   SetDIBits/GetDIBits row placement (compare VGA.DRV)
 #   build/DISPSTR.EXE   native StretchBlt/StretchDIBits against GDI's own, timed
 #   build/DISPSMAP.EXE  which source pixels GDI's stretch emulation picks
+#   build/DDPLAY.EXE    plays frames through dispdib/DISPDIB.DLL, reads them back
 set -eu
 cd "$(dirname "$0")"
 
@@ -51,4 +52,7 @@ wcl -q -zW -bt=windows -ml -i="$WATCOM/h/win" \
 wcl -q -zW -bt=windows -ml -i="$WATCOM/h/win" \
     -fo=../../build/display_stretchmap_probe.obj \
     -fe=../../build/DISPSMAP.EXE display_stretchmap_probe.c
+wcl -q -zW -bt=windows -ml -i="$WATCOM/h/win" \
+    -fo=../../build/dispdib_probe.obj \
+    -fe=../../build/DDPLAY.EXE dispdib_probe.c
 echo "Built the probes above in build/ (not executed by this script)."

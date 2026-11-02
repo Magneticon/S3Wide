@@ -261,8 +261,16 @@ static int s3_enable_display(S3_PDEV S3_FAR *device, S3_U16 style)
     }
     s3_swcursor_start();
     S3_SwitchStart();
+    /* After a Disable/Enable cycle (GDI Death and Resurrection) the S3
+       hardware cursor shape must be loaded again. */
+    if (s3_mode.backend == S3_BACKEND_S3) S3_HwCursorRestore();
     S3_TRACE_EVENT("Enable.device.ok", style, 0);
     return 1;
+}
+
+int S3_DisplayIsEnabled(void)
+{
+    return s3_display_runtime.enabled != 0;
 }
 
 void S3_DisplaySuspend(void)

@@ -300,7 +300,7 @@ S3_U16 S3_FAR S3_PASCAL SetCursor(void S3_FAR *cursor_shape)
         return (S3_U16)(S3_DisplaySwCursorShape(shape) ? 1 : 0);
     }
     s3_cursor_visible = 0;
-    if (!S3_SwitchInBackground()) S3_HwCursorEnable(0);
+    if (!S3_SwitchInBackground() && S3_DisplayIsEnabled()) S3_HwCursorEnable(0);
     if (shape == (const S3_CURSORSHAPE16 S3_FAR *)0) {
         return 1; /* hide */
     }
@@ -310,8 +310,9 @@ S3_U16 S3_FAR S3_PASCAL SetCursor(void S3_FAR *cursor_shape)
     }
     s3_cursor_hot_x = shape->csHotX;
     s3_cursor_hot_y = shape->csHotY;
-    if (S3_SwitchInBackground()) {
-        /* A DOS session owns the hardware: S3_HwCursorRestore loads it. */
+    if (S3_SwitchInBackground() || !S3_DisplayIsEnabled()) {
+        /* A DOS session or a full-screen DIB player owns the hardware:
+           S3_HwCursorRestore (or the next Enable) loads it. */
         s3_cursor_visible = 1;
         return 1;
     }
@@ -339,7 +340,7 @@ static void s3_move_cursor(S3_I16 x, S3_I16 y)
         S3_DisplaySwCursorMove(x, y);
         return;
     }
-    if (s3_cursor_visible && !S3_SwitchInBackground()) {
+    if (s3_cursor_visible && !S3_SwitchInBackground() && S3_DisplayIsEnabled()) {
         S3_HwCursorMove((S3_I16)(x - s3_cursor_hot_x), (S3_I16)(y - s3_cursor_hot_y));
     }
 }

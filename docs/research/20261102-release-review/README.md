@@ -148,7 +148,8 @@ mode (`vbe.nomode`, `mode.selected 0001`).
 
 Video for Windows' full-screen mode switches to a 320x240/320x200 VGA mode
 through DISPDIB and bypasses the display driver, so a 16:9 film is shown
-in a 4:3 mode (DOSBox-X then stretches it to the window). Playing in a
+in a 4:3 mode (DOSBox-X then stretches it to the window; the replacement
+DISPDIB.DLL in `../20261102-dispdib/` fixes the shape). Playing in a
 window through the driver keeps the desktop's shape, but every frame was
 stretched by GDI's emulation (GetDIBits/SetDIBits bands and BitBlt), which
 is slow and, at 16/32 bpp beyond about 800 pixels wide, draws nothing.

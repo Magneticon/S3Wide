@@ -31,6 +31,10 @@ void S3_DisplaySetRect(S3_RECT16 S3_FAR *rect, S3_I32 left, S3_I32 top,
 void S3_SwitchStart(void);
 void S3_SwitchStop(void);
 int S3_SwitchInBackground(void);
+/* Nonzero while the display is enabled (between Enable and Disable; GDI's
+   Death disables it while a full-screen DIB player such as DISPDIB owns the
+   screen). The hardware cursor is left alone while it is not. */
+int S3_DisplayIsEnabled(void);
 int S3_DisplayBlocked(const void S3_FAR *device, const void S3_FAR *other);
 void S3_SwitchRepaintDisable(S3_U16 disable);
 /* s3_exports.c: the screen is going to a DOS session / coming back (mode
