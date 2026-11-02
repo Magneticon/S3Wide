@@ -4,6 +4,14 @@ Experimental Windows 3.1/3.11 display-driver targeting native widescreen modes o
 
 **Use:** download the release zip and read the [S3Wide User Guide](docs/guide/S3WIDE-GUIDE.md) ([PDF](docs/guide/S3WIDE-GUIDE.pdf)).
 
+**Note:** This is experimental feature, shipped as is. It has not been tested on real hardware, only in DOSBOX-X, therefore functionality might vary.
+
+<img width="1920" height="1080" alt="0" src="https://github.com/user-attachments/assets/3e309dfe-acca-4c4a-83aa-cb5d53d51773" />
+<img width="1920" height="1080" alt="1" src="https://github.com/user-attachments/assets/150ebac9-0f7e-4f37-95d4-61592a9c393b" />
+<img width="1920" height="1080" alt="2" src="https://github.com/user-attachments/assets/ed27fba0-0aef-4f83-8715-1672a156ead1" />
+<img width="1920" height="1080" alt="3" src="https://github.com/user-attachments/assets/7800cf9d-2a32-4f5c-a0d8-9dc9dce43de3" />
+<img width="1920" height="1080" alt="4" src="https://github.com/user-attachments/assets/ae357042-5b4e-4975-ad25-c7e7e8dc9d27" />
+
 ## Choosing a mode
 
 `S3WIDE.DRV` reads its mode from `SYSTEM.INI`:
