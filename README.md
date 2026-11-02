@@ -1,5 +1,7 @@
 # S3Wide
 
+**Users:** download the release zip and read the [S3Wide User Guide](docs/guide/S3WIDE-GUIDE.md) ([PDF](docs/guide/S3WIDE-GUIDE.pdf)). In short: unpack, run `S3PREP C:\WINDOWS` once (it builds `S3WIDE.DRV` from your own `VGA.DRV`), then install with Windows Setup from `OEMSETUP.INF`. The release contains no Microsoft files; `package/make-release.sh` builds it from source.
+
 Experimental Windows 3.1/3.11 display-driver project targeting native widescreen modes on the S3 Trio64 emulated by DOSBox-X.
 
 ## Primary milestone

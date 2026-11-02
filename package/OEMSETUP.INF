@@ -9,9 +9,10 @@
 ; the driver starts in the largest one it can draw that is no larger.
 ; 1280x720 256 colors on an S3 Trio64 uses the S3 registers directly.
 ;
-; The grabber, logo and the fonts Setup copies for a VGA-style display
-; (VGA*.FON, *WOA.FON) are in the package folder too: when Setup asks
-; for a Windows disk, give it the same folder.
+; Run S3PREP first: it makes S3WIDE.DRV from S3WIDE.BIN and your own
+; VGA.DRV, and copies the grabber, logo and fonts Setup installs for a
+; VGA-style display (VGA.3GR, VGALOGO.*, VGA*.FON, *WOA.FON) into the
+; package folder: when Setup asks for a Windows disk, give it that folder.
 ; ---------------------------------------------------------------
 
 [data]

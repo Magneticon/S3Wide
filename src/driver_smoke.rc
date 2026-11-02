@@ -1,8 +1,8 @@
 /* The DDA requires VERSIONINFO. This display driver provides no device fonts;
    its RealizeObject returns zero for OBJ_FONT so GDI uses system fonts. */
 1 VERSIONINFO
-FILEVERSION    0,1,0,0
-PRODUCTVERSION 0,1,0,0
+FILEVERSION    1,0,0,0
+PRODUCTVERSION 1,0,0,0
 FILEFLAGSMASK  0x3fL
 FILEFLAGS      0x0L
 FILEOS         0x00010001L
@@ -14,11 +14,11 @@ BEGIN
     BLOCK "040904B0"
     BEGIN
       VALUE "FileDescription", "S3 widescreen display driver\0"
-      VALUE "FileVersion", "0, 1, 0, 0\0"
+      VALUE "FileVersion", "1, 0, 0, 0\0"
       VALUE "InternalName", "S3WIDE\0"
       VALUE "OriginalFilename", "S3WIDE_DRIVER.DLL\0"
       VALUE "ProductName", "S3 widescreen display driver\0"
-      VALUE "ProductVersion", "0, 1, 0, 0\0"
+      VALUE "ProductVersion", "1, 0, 0, 0\0"
     END
   END
   BLOCK "VarFileInfo"
