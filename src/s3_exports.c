@@ -19,6 +19,8 @@ static S3_DEVICE_RUNTIME s3_display_runtime;
    framebuffer through a second selector, moved with DPMI 0007h so the
    interrupt-time path needs no KERNEL call. */
 static S3_SWCURSOR s3_swcursor;
+/* s3_swcursor has been initialised (its shape outlives Disable/Enable). */
+static int s3_swcursor_ready;
 static S3_SURFACE s3_cursor_surface;
 static S3_U16 s3_cursor_selector;
 static S3_U16 s3_swcursor_active;
@@ -109,7 +111,14 @@ static void s3_swcursor_start(void)
         return;
     }
     s3_cursor_surface.bytes_pixel = s3_mode.bytes_pixel;
-    S3_SwCursorInit(&s3_swcursor, &s3_cursor_surface);
+    /* After a Disable (GDI Death, e.g. a full-screen video) USER does not
+       set the shape again: keep the one it set before. */
+    if (s3_swcursor_ready) {
+        S3_SwCursorRestart(&s3_swcursor, &s3_cursor_surface);
+    } else {
+        S3_SwCursorInit(&s3_swcursor, &s3_cursor_surface);
+        s3_swcursor_ready = 1;
+    }
     s3_swcursor_active = 1;
     S3_TRACE_EVENT("swcursor.start", selector, 0);
 }
@@ -131,13 +140,21 @@ int S3_DisplaySwCursorActive(void)
 
 int S3_DisplaySwCursorShape(const S3_CURSORSHAPE16 S3_FAR *shape)
 {
-    if (!s3_swcursor_active) return shape == (const S3_CURSORSHAPE16 S3_FAR *)0;
+    /* While stopped the cursor stays held (busy), so this only records the
+       shape for the next start. */
+    if (!s3_swcursor_ready) return shape == (const S3_CURSORSHAPE16 S3_FAR *)0;
     return S3_SwCursorSetShape(&s3_swcursor, shape);
 }
 
 void S3_DisplaySwCursorMove(S3_I16 x, S3_I16 y)
 {
-    if (s3_swcursor_active) S3_SwCursorMove(&s3_swcursor, x, y);
+    if (s3_swcursor_active) {
+        S3_SwCursorMove(&s3_swcursor, x, y);
+    } else if (s3_swcursor_ready) {
+        /* Stopped (display disabled): drawn here after the next start. */
+        s3_swcursor.x = x;
+        s3_swcursor.y = y;
+    }
 }
 
 void S3_DisplaySwCursorCheck(void)
@@ -276,6 +293,9 @@ int S3_DisplayIsEnabled(void)
 void S3_DisplaySuspend(void)
 {
     if (s3_swcursor_active) S3_SwCursorSuspend(&s3_swcursor);
+    /* Keep the Windows arrow off a DOS screen the VDD restores without a
+       BIOS mode set; Resume loads it again. */
+    if (s3_mode.backend == S3_BACKEND_S3 && s3_display_runtime.enabled) S3_HwCursorEnable(0);
 }
 
 int S3_DisplayResume(void)

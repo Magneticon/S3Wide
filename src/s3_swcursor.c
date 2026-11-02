@@ -132,6 +132,13 @@ void S3_SwCursorInit(S3_SWCURSOR S3_FAR *cursor, S3_SURFACE S3_FAR *surface)
     cursor->surface = surface;
 }
 
+void S3_SwCursorRestart(S3_SWCURSOR S3_FAR *cursor, S3_SURFACE S3_FAR *surface)
+{
+    cursor->surface = surface;
+    cursor->drawn = 0;
+    cursor->busy = 0;
+}
+
 int S3_SwCursorSetShape(S3_SWCURSOR S3_FAR *cursor,
                         const S3_CURSORSHAPE16 S3_FAR *shape)
 {

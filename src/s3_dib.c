@@ -34,7 +34,7 @@ int S3_DibFormat(const S3_BITMAPINFO16 S3_FAR *info, S3_DIB_FORMAT S3_FAR *forma
 
     if (info == (const S3_BITMAPINFO16 S3_FAR *)0) return 0;
     header = &info->bmiHeader;
-    if (header->biSize < sizeof(S3_BITMAPINFOHEADER16) ||
+    if (header->biSize < sizeof(S3_BITMAPINFOHEADER16) || header->biSize > 1024UL ||
         header->biWidth == 0 || header->biWidth > S3_DIB_ROW_MAX * 8UL ||
         header->biHeight == 0 || header->biHeight > 32767UL ||
         header->biPlanes != 1) {
@@ -58,7 +58,7 @@ int S3_DibFormat(const S3_BITMAPINFO16 S3_FAR *info, S3_DIB_FORMAT S3_FAR *forma
     switch (header->biBitCount) {
     case 1: case 4: case 8:
         colors = header->biClrUsed != 0 ? header->biClrUsed : (1UL << header->biBitCount);
-        if (colors > (1UL << header->biBitCount)) return 0;
+        if (colors > (1UL << header->biBitCount)) colors = 1UL << header->biBitCount;
         break;
     case 24:
         colors = 0;
@@ -133,7 +133,8 @@ static void s3_build_tables(const S3_BITMAPINFO16 S3_FAR *info,
     S3_U16 i;
     const S3_RGBQUAD16 S3_FAR *quad;
     for (i = 0; i < format->colors; ++i) {
-        quad = &info->bmiColors[i];
+        quad = (const S3_RGBQUAD16 S3_FAR *)((const S3_U8 S3_FAR *)info +
+                                             info->bmiHeader.biSize) + i;
         s3_table_pixel[i] = S3_RGBToPixel((S3_U32)quad->rgbRed |
                                           ((S3_U32)quad->rgbGreen << 8) |
                                           ((S3_U32)quad->rgbBlue << 16));
@@ -425,7 +426,8 @@ static void s3_fill_color_table(S3_BITMAPINFO16 S3_FAR *info,
     S3_U32 rgb;
     S3_RGBQUAD16 S3_FAR *quad;
     for (i = 0; i < format->colors; ++i) {
-        quad = &info->bmiColors[i];
+        quad = (S3_RGBQUAD16 S3_FAR *)((S3_U8 S3_FAR *)info +
+                                       info->bmiHeader.biSize) + i;
         if (format->bits == 1) {
             rgb = i ? 0x00FFFFFFUL : 0;
         } else if (format->bits == 4) {
@@ -504,14 +506,31 @@ S3_U16 S3_DibBitmapBits(void S3_FAR *bitmap, S3_U16 get, S3_U16 start,
             byte0 = (S3_U32)piece * format.bits / 8U;
             bytes = ((S3_U32)(piece + n) * format.bits + 7U) / 8U - byte0;
             if (get) {
-                /* The last piece also clears the scan's padding. */
-                if (piece + n == count) bytes = format.stride - byte0;
+                /* The last piece also clears the rest of the scan (padding,
+                   and pixels past the bitmap when the DIB is wider). */
+                S3_U32 tail = 0;
+                if (piece + n == count) {
+                    tail = format.stride - byte0 - bytes;
+                    if (bytes + tail <= S3_ROW_BYTES_MAX) {
+                        bytes += tail;
+                        tail = 0;
+                    }
+                }
                 if (!S3_TargetReadRow(&target, (S3_I16)piece, y, n, s3_device_row)) {
                     return done;
                 }
                 s3_target_to_dib(&format, target.kind, n, target.bytes_pixel, (S3_U16)bytes);
                 s3_dib_scan(bits, (S3_U32)scan * format.stride + byte0, s3_dib_row,
                             (S3_U16)bytes, 1);
+                byte0 += bytes;
+                while (tail != 0) {
+                    S3_U16 chunk = (S3_U16)(tail < S3_ROW_BYTES_MAX ? tail : S3_ROW_BYTES_MAX);
+                    s3_fmemset(s3_dib_row, 0, chunk);
+                    s3_dib_scan(bits, (S3_U32)scan * format.stride + byte0, s3_dib_row,
+                                chunk, 1);
+                    byte0 += chunk;
+                    tail -= chunk;
+                }
             } else {
                 s3_dib_scan(bits, (S3_U32)scan * format.stride + byte0, s3_dib_row,
                             (S3_U16)bytes, 0);
@@ -562,6 +581,9 @@ S3_I16 S3_DibStretchToDevice(void S3_FAR *device, S3_I16 dx, S3_I16 dy,
         if (clip->bottom < bottom) bottom = clip->bottom;
     }
     if (left >= right || top >= bottom) return sh;
+    /* The map and the scaled row hold S3_DIB_ROW_MAX pixels; a wider memory
+       bitmap is left to GDI's emulation. */
+    if (right - left > S3_DIB_ROW_MAX) return -1;
     count = (S3_U16)(right - left);
     S3_StretchMap(s3_dib_map, (S3_U16)(left - dx), count, (S3_U16)sw, (S3_U16)dw);
     s3_build_tables(info, &format);

@@ -279,9 +279,11 @@ static void test_setdibits_to_device_adapter(void)
 
     CHECK(SetDIBitsToDevice(&pdev, 0, 0, 2, 2, &clip, (S3_DRAWMODE16 *)0,
                             bits, (S3_BITMAPINFO16 *)&info, translate) == 0);
+    /* A colour table longer than the depth can index (256 entries on a
+       4-bpp DIB, seen in real files) is clamped, not refused. */
     info.header.biBitCount = 4;
     CHECK(SetDIBitsToDevice(&pdev, 0, 0, 0, 1, &clip, (S3_DRAWMODE16 *)0,
-                            bits, (S3_BITMAPINFO16 *)&info, translate) == 0);
+                            bits, (S3_BITMAPINFO16 *)&info, translate) == 1);
     info.header.biBitCount = 8;
     /* Without a translate table the RGB colour table is used (non-palette
        device), through the generic DIB path. */

@@ -137,13 +137,15 @@ static void s3_intersect(S3_I16 S3_FAR *left, S3_I16 S3_FAR *top,
 static int s3_fill_rows(const S3_TARGET S3_FAR *target, S3_I16 left, S3_I16 top,
                         S3_I16 right, S3_I16 bottom, S3_U32 color)
 {
-    S3_I16 y;
+    S3_I16 y, x, n;
     if (left >= right) return 1;
-    if (right - left > S3_TEXT_ROW_MAX) return 0;
-    S3_FillPixels(s3_text_row, color, (S3_U16)(right - left), target->bytes_pixel);
+    /* Spans wider than the row buffer (memory bitmaps) go in pieces. */
+    n = (S3_I16)(right - left > S3_TEXT_ROW_MAX ? S3_TEXT_ROW_MAX : right - left);
+    S3_FillPixels(s3_text_row, color, (S3_U16)n, target->bytes_pixel);
     for (y = top; y < bottom; ++y) {
-        if (!S3_TargetWriteRow(target, left, y, (S3_U16)(right - left), s3_text_row)) {
-            return 0;
+        for (x = left; x < right; x = (S3_I16)(x + n)) {
+            S3_U16 piece = (S3_U16)(right - x < n ? right - x : n);
+            if (!S3_TargetWriteRow(target, x, y, piece, s3_text_row)) return 0;
         }
     }
     return 1;

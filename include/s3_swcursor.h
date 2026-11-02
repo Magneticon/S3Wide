@@ -31,6 +31,9 @@ typedef struct S3_SWCURSOR {
 } S3_SWCURSOR;
 
 void S3_SwCursorInit(S3_SWCURSOR S3_FAR *cursor, S3_SURFACE S3_FAR *surface);
+/* Start drawing again on a (new) surface after a stop, keeping the shape,
+   hot spot and position: nothing is held and nothing is on screen. */
+void S3_SwCursorRestart(S3_SWCURSOR S3_FAR *cursor, S3_SURFACE S3_FAR *surface);
 /* NULL shape hides the cursor. Returns nonzero on success. */
 int S3_SwCursorSetShape(S3_SWCURSOR S3_FAR *cursor,
                         const S3_CURSORSHAPE16 S3_FAR *shape);

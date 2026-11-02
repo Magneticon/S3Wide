@@ -46,11 +46,15 @@ static S3_REPAINT_PROC s3_repaint;
 
 static void s3_switch(S3_U16 to_foreground)
 {
+    /* Only a real change counts: a repeated message would unbalance the
+       software cursor's hold. */
     if (!to_foreground) {
+        if (s3_background) return;
         s3_background = 1;
         S3_DisplaySuspend();
         return;
     }
+    if (!s3_background) return;
     (void)S3_DisplayResume();
     s3_background = 0;
     if (s3_repaint_disabled) {

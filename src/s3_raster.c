@@ -513,6 +513,9 @@ int S3_RasterStretchBlt(void S3_FAR *destination, S3_I16 dx, S3_I16 dy,
         if (clip->bottom < bottom) bottom = clip->bottom;
     }
     if (left >= right || top >= bottom) return 1;
+    /* The map and the scaled row hold S3_ROW_MAX pixels; a wider memory
+       bitmap is left to GDI's emulation. */
+    if (right - left > S3_ROW_MAX) return -1;
     count = (S3_U16)(right - left);
     S3_StretchMap(s3_stretch_map, (S3_U16)(left - dx), count, (S3_U16)sw, (S3_U16)dw);
     for (y = (S3_I16)top; y < (S3_I16)bottom; ++y) {

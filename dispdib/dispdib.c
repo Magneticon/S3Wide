@@ -48,6 +48,7 @@
 
 #define MAX_WIDTH 1280
 #define MAX_FRAME_WIDTH 1280
+#define MAX_FRAME_HEIGHT 1024
 
 /* Imported by ordinal (see dispdib.lnk). */
 BOOL FAR PASCAL Death(HDC dc);
@@ -282,8 +283,14 @@ static int find_mode(int fw, int fh, WORD want_w, WORD want_h, MODEINFO *found)
         return 0;
     }
     version = get16(buf + 4);
-    list = (const WORD FAR *)MAKELP(segment_selector(HIWORD(get32(buf + 14))),
-                                    LOWORD(get32(buf + 14)));
+    {
+        WORD list_sel = segment_selector(HIWORD(get32(buf + 14)));
+        if (list_sel == 0 || LOWORD(get32(buf + 14)) > 0xFE00U) {
+            GlobalDosFree(LOWORD(dos));
+            return 0;
+        }
+        list = (const WORD FAR *)MAKELP(list_sel, LOWORD(get32(buf + 14)));
+    }
     while (count < 256 && list[count] != 0xFFFF) {
         modes[count] = list[count];
         ++count;
@@ -355,8 +362,8 @@ static void clear_screen(void)
 static void set_palette(const BITMAPINFOHEADER FAR *bi)
 {
     const RGBQUAD FAR *colors = (const RGBQUAD FAR *)((const BYTE FAR *)bi + bi->biSize);
-    WORD n = bi->biClrUsed ? (WORD)bi->biClrUsed : 256, i;
-    BYTE pal[768];
+    WORD n = bi->biClrUsed == 0 || bi->biClrUsed > 256 ? 256 : (WORD)bi->biClrUsed, i;
+    static BYTE pal[768];
     if (n > 256) n = 256;
     _fmemset(pal, 0, sizeof(pal));
     for (i = 0; i < n; ++i) {
@@ -378,7 +385,8 @@ static UINT check_format(const BITMAPINFOHEADER FAR *bi)
     if (bi == NULL) return DISPLAYDIB_NOERROR;
     if (bi->biSize < sizeof(BITMAPINFOHEADER)) return DISPLAYDIB_INVALIDDIB;
     if (bi->biBitCount != 8 || (bi->biCompression != BI_RGB && bi->biCompression != BI_RLE8) ||
-        bi->biWidth <= 0 || bi->biWidth > MAX_FRAME_WIDTH || bi->biHeight <= 0) {
+        bi->biWidth <= 0 || bi->biWidth > MAX_FRAME_WIDTH || bi->biHeight <= 0 ||
+        bi->biHeight > MAX_FRAME_HEIGHT) {
         return DISPLAYDIB_INVALIDFORMAT;
     }
     return DISPLAYDIB_NOERROR;
@@ -502,7 +510,7 @@ static void decode_rle8(const BYTE huge *p, DWORD size, int w, int h)
     BYTE count, code, v;
     WORD i;
 #define NEXT(b) do { if (pos >= size) return; (b) = p[pos++]; } while (0)
-#define PUT(b) do { if (x < w && y < h) frame_bits[(DWORD)y * w + x] = (b); ++x; } while (0)
+#define PUT(b) do { if (x < w) frame_bits[(DWORD)y * w + x++] = (b); } while (0)
     for (;;) {
         NEXT(count);
         NEXT(code);
@@ -512,7 +520,7 @@ static void decode_rle8(const BYTE huge *p, DWORD size, int w, int h)
         }
         if (code == 0) {
             x = 0;
-            ++y;
+            if (++y >= h) return;
         } else if (code == 1) {
             return;
         } else if (code == 2) {
@@ -520,7 +528,9 @@ static void decode_rle8(const BYTE huge *p, DWORD size, int w, int h)
             NEXT(dx);
             NEXT(dy);
             x += dx;
+            if (x > w) x = w;
             y += dy;
+            if (y >= h) return;
         } else {
             for (i = 0; i < code; ++i) {
                 NEXT(v);
@@ -540,7 +550,7 @@ static BOOL ensure_frame(int w, int h)
         GlobalUnlock(frame_handle);
         GlobalFree(frame_handle);
     }
-    frame_handle = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, (DWORD)w * h);
+    frame_handle = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE | GMEM_ZEROINIT, (DWORD)w * h);
     frame_bits = frame_handle ? (BYTE huge *)GlobalLock(frame_handle) : NULL;
     frame_w = w;
     frame_h = h;
@@ -621,13 +631,13 @@ UINT FAR PASCAL DisplayDibEx(LPBITMAPINFOHEADER bi, int x, int y,
     if (r != DISPLAYDIB_NOERROR) return r;
     if (!active) {
         /* A single DisplayDib call: show the DIB, then wait unless NOWAIT. */
-        r = begin(bi, (WORD)(flags | DISPLAYDIB_NOWAIT));
+        r = begin(bi, flags);
         if (r != DISPLAYDIB_NOERROR) return r;
         implicit = 1;
     }
     if (flags & DISPLAYDIB_TEST) return DISPLAYDIB_NOERROR;
     if (bits == NULL) {
-        WORD colors = bi->biClrUsed ? (WORD)bi->biClrUsed : 256;
+        WORD colors = bi->biClrUsed == 0 || bi->biClrUsed > 256 ? 256 : (WORD)bi->biClrUsed;
         bits = (LPSTR)bi + bi->biSize + colors * sizeof(RGBQUAD);
     }
     if (!(flags & DISPLAYDIB_NOPALETTE)) set_palette(bi);

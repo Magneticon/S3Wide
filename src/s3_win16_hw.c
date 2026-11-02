@@ -187,6 +187,10 @@ static int S3_FAR S3_PASCAL s3_program_mode(void S3_FAR *context)
     if (provider == (S3_PORT_PROVIDER S3_FAR *)0 || !provider->timing.valid) {
         return 0;
     }
+    /* Coming back from a DOS session the BIOS may have locked the S3
+       system extensions again (CR39); unlock them as Enable did. */
+    outp(provider->mode_io.crtc_index_port, 0x39);
+    outp(provider->mode_io.crtc_index_port + 1, 0xA5);
     /* The candidate rolls its own registers back if verification fails. */
     if (!S3_Program720p8bppCandidate(&provider->mode_io, &provider->timing)) {
         S3_TRACE_EVENT("hw.program.fail", 1, 0);
@@ -194,6 +198,7 @@ static int S3_FAR S3_PASCAL s3_program_mode(void S3_FAR *context)
     }
     s3_setup_packed_8bpp();
     S3_HwCursorEnable(0);
+    outp(0x3C6, 0xFF); /* a DOS program may have left the DAC mask changed */
     if (!S3_ProgramRGB332Palette6(&provider->register_io)) {
         S3_TRACE_EVENT("hw.program.fail", 2, 0);
         return 0;
