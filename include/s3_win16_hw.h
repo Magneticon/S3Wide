@@ -11,6 +11,9 @@
    separately by S3_Win16NativeSelectorOps. */
 int S3_Win16PortModeOps(S3_BRIDGE_OPS S3_FAR *ops);
 
+/* Load the driver's 256-entry colour table into the VGA DAC (6-bit). */
+int S3_Win16LoadPalette(void);
+
 /* S3 hardware cursor (CR45-CR4F). The pattern lives at the 1 KiB-aligned
    video memory offset S3_HW_CURSOR_OFFSET, just past the framebuffer and
    inside the bridge's bank 14. Colours: background 0 (black), foreground

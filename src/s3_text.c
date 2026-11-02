@@ -3,9 +3,9 @@
 #include <i86.h>
 #endif
 
-#define S3_TEXT_ROW_MAX 1280
+#define S3_TEXT_ROW_MAX S3_ROW_PIXELS_MAX
 
-static S3_U8 s3_text_row[S3_TEXT_ROW_MAX];
+static S3_U8 S3_FAR_DATA s3_text_row[S3_ROW_BYTES_MAX];
 
 /* Font segment fields by offset from fsVersion. */
 #define S3_FS_VERSION      0

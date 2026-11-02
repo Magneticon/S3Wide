@@ -202,6 +202,17 @@ typedef char S3_ASSERT_LPEN_COLOR_6[(offsetof(S3_LPEN16, lopnColor) == 6) ? 1 : 
 typedef char S3_ASSERT_PPEN_12[(sizeof(S3_PPEN16) == 12) ? 1 : -1];
 typedef char S3_ASSERT_RECT_8[(sizeof(S3_RECT16) == 8) ? 1 : -1];
 
+/* Widest row any drawing path handles, and its size at 4 bytes per pixel.
+   Row buffers that size live in their own far data segments (S3_FAR_DATA)
+   so DGROUP stays below 64 KiB. */
+#define S3_ROW_PIXELS_MAX   4096
+#define S3_ROW_BYTES_MAX    16384U
+#if defined(S3_HOST_TEST)
+#define S3_FAR_DATA
+#else
+#define S3_FAR_DATA __far
+#endif
+
 #define S3_WIDTH            1280U
 #define S3_HEIGHT           720U
 #define S3_BITS_PIXEL       8U

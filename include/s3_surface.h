@@ -10,6 +10,7 @@ typedef struct S3_SURFACE {
     S3_U16 width;
     S3_U16 height;
     S3_U16 pitch;
+    S3_U16 bytes_pixel;     /* 1 unless the owner sets more after Init */
     S3_U32 framebuffer_bytes;
     S3_U32 bank_bytes;
     S3_U32 aperture_bytes;
@@ -40,7 +41,8 @@ int S3_SurfacePutPixel(S3_SURFACE S3_FAR *surface,
 int S3_SurfaceGetPixel(S3_SURFACE S3_FAR *surface,
                        S3_I16 x, S3_I16 y, S3_U8 S3_FAR *color);
 int S3_FarSpanFitsSingleSegment(S3_U16 pointer_offset, S3_U32 bytes);
-/* Map the bank holding (x, y) and return a pointer to that pixel; *contiguous
+/* Map the bank holding pixel (x, y) (byte x * bytes_pixel of row y) and
+   return a pointer to it; *contiguous
    receives the bytes available before the bank ends. NULL if out of range. */
 S3_U8 S3_FAR *S3_SurfaceSpan(S3_SURFACE S3_FAR *surface, S3_I16 x, S3_I16 y,
                              S3_U16 S3_FAR *contiguous);

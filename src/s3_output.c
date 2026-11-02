@@ -1,8 +1,8 @@
 #include "s3_output.h"
 
-#define S3_OUTPUT_ROW_MAX 1280
+#define S3_OUTPUT_ROW_MAX S3_ROW_PIXELS_MAX
 
-static S3_U8 s3_span_row[S3_OUTPUT_ROW_MAX];
+static S3_U8 S3_FAR_DATA s3_span_row[S3_ROW_BYTES_MAX];
 
 S3_U8 S3_Rop2ToRop3(S3_I16 rop2)
 {

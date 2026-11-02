@@ -33,7 +33,8 @@ S3_U8 S3_FAR *S3_SurfaceSpan(S3_SURFACE S3_FAR *surface, S3_I16 x, S3_I16 y,
         (S3_U16)x >= surface->width || (S3_U16)y >= surface->height) {
         return (S3_U8 S3_FAR *)0;
     }
-    offset = (S3_U32)(S3_U16)y * (S3_U32)surface->pitch + (S3_U16)x;
+    offset = (S3_U32)(S3_U16)y * (S3_U32)surface->pitch +
+             (S3_U32)(S3_U16)x * (surface->bytes_pixel ? surface->bytes_pixel : 1);
     if (offset >= surface->framebuffer_bytes) {
         return (S3_U8 S3_FAR *)0;
     }
@@ -77,6 +78,7 @@ int S3_SurfaceInit(S3_SURFACE S3_FAR *surface,
     surface->width = width;
     surface->height = height;
     surface->pitch = pitch;
+    surface->bytes_pixel = 1;
     surface->framebuffer_bytes = framebuffer_bytes;
     surface->bank_bytes = bank_bytes;
     surface->aperture_bytes = aperture_bytes;

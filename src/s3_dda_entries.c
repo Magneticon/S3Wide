@@ -6,8 +6,8 @@
 #include "s3_cursor.h"
 #include "s3_win16_hw.h"
 
-int S3_DisplayWriteOffscreen(S3_U32 offset, const S3_U8 S3_FAR *data,
-                             S3_U16 bytes);
+#include "s3_display.h"
+#include "s3_mode.h"
 
 /* Remaining DDA entry points of the WfW 3.11 stock display-driver export
    table. Signatures follow the Windows 98 DDK reference for the same
@@ -65,6 +65,7 @@ S3_U32 S3_FAR S3_PASCAL ExtTextOut(void S3_FAR *device, S3_I16 x, S3_I16 y,
                                    void S3_FAR *opaque_rect, S3_U16 options)
 {
     S3_U32 result;
+    int excluded;
     (void)text_xform;
     S3_TRACE_EVENT("ExtTextOut.enter", count, options);
 #if defined(S3_TRACE)
@@ -78,10 +79,12 @@ S3_U32 S3_FAR S3_PASCAL ExtTextOut(void S3_FAR *device, S3_I16 x, S3_I16 y,
         }
     }
 #endif
+    excluded = S3_DisplayExclude(device, (void S3_FAR *)0);
     result = S3_TextOut(device, x, y, (const S3_RECT16 S3_FAR *)clip_rect,
                         (const S3_U8 S3_FAR *)text, count, font_info,
                         (S3_DRAWMODE16 S3_FAR *)draw_mode, char_widths,
                         (const S3_RECT16 S3_FAR *)opaque_rect, options);
+    S3_DisplayUnexclude(excluded);
     if (result == 0) S3_TRACE_EVENT("ExtTextOut.fail", count, options);
     return result;
 }
@@ -167,7 +170,7 @@ S3_U16 S3_FAR S3_PASCAL FastBorder(S3_RECT16 S3_FAR *rect, S3_U16 h_border,
     const S3_PBRUSH16 S3_FAR *pbrush = (const S3_PBRUSH16 S3_FAR *)brush;
     const S3_DRAWMODE16 S3_FAR *mode = (const S3_DRAWMODE16 S3_FAR *)draw_mode;
     S3_I16 l, t, r, b, hw, vw;
-    int ok;
+    int ok, excluded;
 
     if (rect == (S3_RECT16 S3_FAR *)0) return 0;
     l = rect->left;
@@ -177,12 +180,14 @@ S3_U16 S3_FAR S3_PASCAL FastBorder(S3_RECT16 S3_FAR *rect, S3_U16 h_border,
     hw = (S3_I16)h_border;
     vw = (S3_I16)v_border;
     S3_TRACE_EVENT("FastBorder", (S3_U16)hw, (S3_U16)vw);
+    excluded = S3_DisplayExclude(device, (void S3_FAR *)0);
     ok = s3_border_strip(device, l, t, r, (S3_I16)(t + vw), rop, pbrush, mode, clip) &&
          s3_border_strip(device, l, (S3_I16)(b - vw), r, b, rop, pbrush, mode, clip) &&
          s3_border_strip(device, l, (S3_I16)(t + vw), (S3_I16)(l + hw),
                          (S3_I16)(b - vw), rop, pbrush, mode, clip) &&
          s3_border_strip(device, (S3_I16)(r - hw), (S3_I16)(t + vw), r,
                          (S3_I16)(b - vw), rop, pbrush, mode, clip);
+    S3_DisplayUnexclude(excluded);
     return (S3_U16)(ok ? 1 : 0);
 }
 
@@ -236,6 +241,9 @@ S3_U16 S3_FAR S3_PASCAL SetCursor(void S3_FAR *cursor_shape)
     const S3_CURSORSHAPE16 S3_FAR *shape = (const S3_CURSORSHAPE16 S3_FAR *)cursor_shape;
 
     S3_TRACE_EVENT("SetCursor", shape == (const S3_CURSORSHAPE16 S3_FAR *)0, 0);
+    if (s3_mode.backend != S3_BACKEND_S3) {
+        return (S3_U16)(S3_DisplaySwCursorShape(shape) ? 1 : 0);
+    }
     s3_cursor_visible = 0;
     S3_HwCursorEnable(0);
     if (shape == (const S3_CURSORSHAPE16 S3_FAR *)0) {
@@ -259,11 +267,15 @@ S3_U16 S3_FAR S3_PASCAL SetCursor(void S3_FAR *cursor_shape)
 
 /* MoveCursor and CheckCursor run at mouse and timer interrupt time: they
    must not trace (file I/O would re-enter DOS). The hardware cursor needs
-   no redraw, so CheckCursor has nothing to do. */
+   no redraw; CheckCursor only redraws a deferred software cursor. */
 void S3_FAR S3_PASCAL MoveCursor(S3_I16 x, S3_I16 y)
 {
     s3_cursor_x = x;
     s3_cursor_y = y;
+    if (s3_mode.backend != S3_BACKEND_S3) {
+        S3_DisplaySwCursorMove(x, y);
+        return;
+    }
     if (s3_cursor_visible) {
         S3_HwCursorMove((S3_I16)(x - s3_cursor_hot_x), (S3_I16)(y - s3_cursor_hot_y));
     }
@@ -271,6 +283,7 @@ void S3_FAR S3_PASCAL MoveCursor(S3_I16 x, S3_I16 y)
 
 void S3_FAR S3_PASCAL CheckCursor(void)
 {
+    if (s3_mode.backend != S3_BACKEND_S3) S3_DisplaySwCursorCheck();
 }
 
 void S3_FAR S3_PASCAL UserRepaintDisable(S3_U16 disable)

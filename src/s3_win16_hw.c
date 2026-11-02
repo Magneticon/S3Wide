@@ -315,6 +315,17 @@ void S3_HwCursorMove(S3_I16 x, S3_I16 y)
     outp(0x3D4, index);
 }
 
+int S3_Win16LoadPalette(void)
+{
+    S3_REGISTER_IO io;
+    io.crtc_index_port = 0x3D4;
+    io.context = &s3_port_provider;
+    io.read_crtc = s3_read_crtc;
+    io.write_crtc = s3_write_crtc;
+    io.write_dac = s3_write_dac;
+    return S3_ProgramRGB332Palette6(&io);
+}
+
 int S3_Win16PortModeOps(S3_BRIDGE_OPS S3_FAR *ops)
 {
     S3_PORT_PROVIDER S3_FAR *provider = &s3_port_provider;

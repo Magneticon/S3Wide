@@ -21,6 +21,8 @@
 #   WIN_ARGS   extra WIN.COM switches, for example /b for BOOTLOG.TXT
 #   DEMO       1 = DISPBASE.EXE restores Program Manager and opens Calculator
 #              and Notepad before capturing
+#   VESA_HD    1 = list HD and unlimited-size VESA modes (needed for the
+#              driver's VBE backend at 1280x720, 1920x1080, 3840x2160 ...)
 # Requires Git Bash or MSYS2 on Windows (uses cygpath).
 set -eu
 
@@ -42,6 +44,14 @@ VISIBLE=${VISIBLE:-0}
 FALLBACK=${FALLBACK:-0}
 WIN_ARGS=${WIN_ARGS:-}
 DEMO=${DEMO:-0}
+VESA_HD=${VESA_HD:-0}
+if [ "$VESA_HD" = 1 ]; then
+    vesa_options="vesa modelist width limit=0
+vesa modelist height limit=0
+allow high definition vesa modes=true"
+else
+    vesa_options=
+fi
 if [ "$VISIBLE" = 1 ]; then
     HOLD=${HOLD:-6}
     probe_args=" $HOLD"
@@ -105,6 +115,7 @@ captures=$win_run\\capture
 
 [video]
 vmemsize=$VMEMSIZE
+$vesa_options
 
 [cpu]
 core=normal

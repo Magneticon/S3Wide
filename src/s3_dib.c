@@ -5,10 +5,10 @@
 extern void S3_FAR S3_PASCAL __AHINCR(void);
 #endif
 
-#define S3_DIB_ROW_MAX 1280
+#define S3_DIB_ROW_MAX S3_ROW_PIXELS_MAX
 
-static S3_U8 s3_dib_row[S3_DIB_ROW_MAX * 3];
-static S3_U8 s3_device_row[S3_DIB_ROW_MAX];
+static S3_U8 S3_FAR_DATA s3_dib_row[S3_ROW_BYTES_MAX];
+static S3_U8 S3_FAR_DATA s3_device_row[S3_ROW_BYTES_MAX];
 static S3_U8 s3_table_index[256];
 static S3_U8 s3_table_mono[256];
 

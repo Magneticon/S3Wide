@@ -1,3 +1,4 @@
+#include "s3_display.h"
 #include "s3_surface.h"
 #include "s3_trace.h"
 #include "s3_brush.h"
@@ -36,18 +37,20 @@ S3_I16 S3_FAR S3_PASCAL BitBlt(void S3_FAR *destination,
                                S3_I32 rop3, void S3_FAR *physical_brush,
                                void S3_FAR *draw_mode)
 {
-    int ok;
+    int ok, excluded;
+    excluded = S3_DisplayExclude(destination, source);
     ok = S3_RasterBitBlt(destination, (S3_I16)destination_x, (S3_I16)destination_y,
                          source, (S3_I16)source_x, (S3_I16)source_y,
                          (S3_I16)width, (S3_I16)height, (S3_U32)rop3,
                          (const S3_PBRUSH16 S3_FAR *)physical_brush,
                          (const S3_DRAWMODE16 S3_FAR *)draw_mode);
+    S3_DisplayUnexclude(excluded);
     S3_TRACE_EVENT(ok ? "BitBlt" : "BitBlt.fail", (S3_U16)((S3_U32)rop3 >> 16),
                    ((S3_PDEV S3_FAR *)destination)->pdType);
     return (S3_I16)(ok ? 1 : 0);
 }
 
-S3_U16 S3_FAR S3_PASCAL Output(void S3_FAR *destination,
+static S3_U16 s3_output_body(void S3_FAR *destination,
                                S3_U16 style, S3_U16 point_count,
                                S3_POINT16 S3_FAR *points,
                                void S3_FAR *physical_pen,
@@ -119,6 +122,21 @@ S3_U16 S3_FAR S3_PASCAL Output(void S3_FAR *destination,
     }
     (void)physical_brush;
     return 1;
+}
+
+S3_U16 S3_FAR S3_PASCAL Output(void S3_FAR *destination,
+                               S3_U16 style, S3_U16 point_count,
+                               S3_POINT16 S3_FAR *points,
+                               void S3_FAR *physical_pen,
+                               void S3_FAR *physical_brush,
+                               void S3_FAR *draw_mode,
+                               S3_RECT16 S3_FAR *clip_rect)
+{
+    int excluded = S3_DisplayExclude(destination, (void S3_FAR *)0);
+    S3_U16 result = s3_output_body(destination, style, point_count, points, physical_pen,
+                                    physical_brush, draw_mode, clip_rect);
+    S3_DisplayUnexclude(excluded);
+    return result;
 }
 
 S3_U32 S3_FAR S3_PASCAL RealizeObject(S3_PDEV S3_FAR *device,
@@ -197,7 +215,7 @@ S3_U32 S3_FAR S3_PASCAL RealizeObject(S3_PDEV S3_FAR *device,
     return (S3_U32)sizeof(S3_PPEN16);
 }
 
-S3_U32 S3_FAR S3_PASCAL Pixel(void S3_FAR *destination,
+static S3_U32 s3_pixel_body(void S3_FAR *destination,
                                S3_U16 x, S3_U16 y, S3_U32 physical_color,
                                void S3_FAR *draw_mode)
 {
@@ -222,7 +240,17 @@ S3_U32 S3_FAR S3_PASCAL Pixel(void S3_FAR *destination,
     return 1;
 }
 
-S3_U16 S3_FAR S3_PASCAL SetDIBitsToDevice(
+S3_U32 S3_FAR S3_PASCAL Pixel(void S3_FAR *destination,
+                               S3_U16 x, S3_U16 y, S3_U32 physical_color,
+                               void S3_FAR *draw_mode)
+{
+    int excluded = S3_DisplayExclude(destination, (void S3_FAR *)0);
+    S3_U32 result = s3_pixel_body(destination, x, y, physical_color, draw_mode);
+    S3_DisplayUnexclude(excluded);
+    return result;
+}
+
+static S3_U16 s3_setdibitstodevice_body(
                                void S3_FAR *destination,
                                S3_U16 x, S3_U16 y,
                                S3_U16 scan_start, S3_U16 scan_count,
@@ -288,4 +316,21 @@ S3_U16 S3_FAR S3_PASCAL SetDIBitsToDevice(
                                  0,
 #endif
                                  translate, 256, clip_rect);
+}
+
+S3_U16 S3_FAR S3_PASCAL SetDIBitsToDevice(
+                               void S3_FAR *destination,
+                               S3_U16 x, S3_U16 y,
+                               S3_U16 scan_start, S3_U16 scan_count,
+                               S3_RECT16 S3_FAR *clip_rect,
+                               S3_DRAWMODE16 S3_FAR *draw_mode,
+                               S3_U8 S3_FAR *dib_bits,
+                               S3_BITMAPINFO16 S3_FAR *bitmap_info,
+                               S3_I16 S3_FAR *translate)
+{
+    int excluded = S3_DisplayExclude(destination, (void S3_FAR *)0);
+    S3_U16 result = s3_setdibitstodevice_body(destination, x, y, scan_start, scan_count,
+                                    clip_rect, draw_mode, dib_bits, bitmap_info, translate);
+    S3_DisplayUnexclude(excluded);
+    return result;
 }

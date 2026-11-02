@@ -64,9 +64,10 @@ static void s3_bridge_clear_unowned_attempt(
     memset(bridge->mode_snapshot, 0, sizeof(bridge->mode_snapshot));
 }
 
-int S3_Win16BridgeOpen(S3_WIN16_BRIDGE S3_FAR *bridge,
-                       const S3_BRIDGE_OPS S3_FAR *ops,
-                       S3_U32 linear_base, S3_U32 aperture_bytes)
+static int s3_bridge_open(S3_WIN16_BRIDGE S3_FAR *bridge,
+                          const S3_BRIDGE_OPS S3_FAR *ops,
+                          S3_U32 linear_base, S3_U32 aperture_bytes,
+                          S3_U32 max_bank, S3_U16 linear_banking)
 {
     S3_U16 code_selector, selector;
     S3_U32 original_limit;
@@ -75,11 +76,16 @@ int S3_Win16BridgeOpen(S3_WIN16_BRIDGE S3_FAR *bridge,
         !s3_bridge_ops_valid(ops) || bridge->selector_owned ||
         bridge->mode_snapshot_valid || bridge->mode_active ||
         linear_base == 0 || aperture_bytes != S3_BRIDGE_APERTURE_BYTES ||
-        linear_base > 0xFFFFFFFFUL - (aperture_bytes - 1UL)) {
+        linear_base > 0xFFFFFFFFUL - (aperture_bytes - 1UL) ||
+        (linear_banking &&
+         (max_bank > 0xFFFFUL ||
+          linear_base > 0xFFFFFFFFUL - (max_bank << 16) - 0xFFFFUL))) {
         return 0;
     }
     bridge->ops = *ops;
     bridge->linear_base = linear_base;
+    bridge->max_bank = max_bank;
+    bridge->linear_banking = linear_banking;
     if (!bridge->ops.current_code_selector(bridge->ops.context,
                                            &code_selector) ||
         code_selector == 0 ||
@@ -147,12 +153,33 @@ int S3_Win16BridgeOpen(S3_WIN16_BRIDGE S3_FAR *bridge,
     return 1;
 }
 
+int S3_Win16BridgeOpen(S3_WIN16_BRIDGE S3_FAR *bridge,
+                       const S3_BRIDGE_OPS S3_FAR *ops,
+                       S3_U32 linear_base, S3_U32 aperture_bytes)
+{
+    return s3_bridge_open(bridge, ops, linear_base, aperture_bytes,
+                          S3_BRIDGE_MAX_BANK, 0);
+}
+
+int S3_Win16BridgeOpenLinear(S3_WIN16_BRIDGE S3_FAR *bridge,
+                             const S3_BRIDGE_OPS S3_FAR *ops,
+                             S3_U32 linear_base, S3_U32 max_bank)
+{
+    return s3_bridge_open(bridge, ops, linear_base, S3_BRIDGE_APERTURE_BYTES,
+                          max_bank, 1);
+}
+
 int S3_Win16BridgeSetBank(S3_WIN16_BRIDGE S3_FAR *bridge, S3_U32 bank)
 {
     if (bridge == (S3_WIN16_BRIDGE S3_FAR *)0 || !bridge->mode_active ||
         !bridge->selector_owned || bridge->window == (void S3_FAR *)0 ||
-        bank > S3_BRIDGE_MAX_BANK) {
+        bank > bridge->max_bank) {
         return 0;
+    }
+    if (bridge->linear_banking) {
+        return bridge->ops.set_selector_base(bridge->ops.context,
+                                             bridge->selector,
+                                             bridge->linear_base + (bank << 16));
     }
     return bridge->ops.set_bank(bridge->ops.context, bank);
 }

@@ -1,5 +1,6 @@
 #include "s3_device.h"
 #include "s3_trace.h"
+#include "s3_mode.h"
 #include <string.h>
 
 #define S3_DEVICE_INIT_COOKIE 0x53334452UL
@@ -56,8 +57,13 @@ int S3_DeviceEnableWithOps(S3_PDEV S3_FAR *device,
 
     /* Open owns mode snapshot and selector cleanup from this point on. Keep
        the caller's PDEV address when any rollback handle must survive. */
-    if (!S3_Win16BridgeOpen(&runtime->bridge, ops, S3_APERTURE_PHYS,
-                            S3_BRIDGE_APERTURE_BYTES)) {
+    if (s3_mode.backend == S3_BACKEND_VBE
+            ? (s3_mode.lfb_linear == 0 ||
+               !S3_Win16BridgeOpenLinear(&runtime->bridge, ops,
+                                         s3_mode.lfb_linear,
+                                         (s3_mode.framebuffer_bytes - 1UL) >> 16))
+            : !S3_Win16BridgeOpen(&runtime->bridge, ops, S3_APERTURE_PHYS,
+                                  S3_BRIDGE_APERTURE_BYTES)) {
         if (s3_bridge_needs_recovery(&runtime->bridge)) {
             runtime->device = device;
             runtime->cleanup_pending = 1;
@@ -65,8 +71,8 @@ int S3_DeviceEnableWithOps(S3_PDEV S3_FAR *device,
         return 0;
     }
 
-    if (!S3_SurfaceInit(&runtime->surface, S3_WIDTH, S3_HEIGHT, S3_PITCH,
-                        S3_FRAMEBUFFER_BYTES, S3_BANK_BYTES,
+    if (!S3_SurfaceInit(&runtime->surface, s3_mode.width, s3_mode.height,
+                        s3_mode.pitch, s3_mode.framebuffer_bytes, S3_BANK_BYTES,
                         S3_BRIDGE_APERTURE_BYTES,
                         (S3_U8 S3_FAR *)runtime->bridge.window,
                         runtime, s3_device_map_bank) ||
@@ -83,6 +89,7 @@ int S3_DeviceEnableWithOps(S3_PDEV S3_FAR *device,
         return 0;
     }
 
+    runtime->surface.bytes_pixel = s3_mode.bytes_pixel;
     /* Bank 0 was selected by BridgeOpen; avoid an unnecessary remap on the
        first drawing operation while preserving callback validation. */
     runtime->surface.current_bank = 0;

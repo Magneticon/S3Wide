@@ -53,6 +53,9 @@ wcc $drvflags -fo=build/s3_dib.obj src/s3_dib.c
 wcc $drvflags -fo=build/s3_text.obj src/s3_text.c
 wcc $drvflags -fo=build/s3_output.obj src/s3_output.c
 wcc $drvflags -fo=build/s3_cursor.obj src/s3_cursor.c
+wcc $drvflags -fo=build/s3_mode.obj src/s3_mode.c
+wcc $drvflags -fo=build/s3_vbe.obj src/s3_vbe.c
+wcc $drvflags -fo=build/s3_swcursor.obj src/s3_swcursor.c
 wrc -q -r -zm -bt=windows -fo=build/driver_smoke.res src/driver_smoke.rc
 # VGA_DRV=path/to/licensed/VGA.DRV: LOCAL bring-up build that also carries
 # that driver's cursors, icons, OEM bitmaps and OEMBIN tables. The result
@@ -73,6 +76,7 @@ cat build/inspection.txt
 env -u INCLUDE "$CC" -std=c89 -Wall -Wextra -Werror -DS3_HOST_TEST -Iinclude \
     src/s3_gdiinfo.c src/s3_color.c src/s3_surface.c src/s3_exports.c \
     src/s3_gdi_stubs.c src/s3_brush.c src/s3_raster.c src/s3_dib.c src/s3_text.c src/s3_output.c src/s3_cursor.c \
+    src/s3_mode.c src/s3_vbe.c src/s3_swcursor.c \
     src/s3_hw.c src/s3_vga_state.c src/s3_win16_bridge.c src/s3_device.c tests/host_test.c \
     -o build/host_checks
 ./build/host_checks

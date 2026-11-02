@@ -43,6 +43,8 @@ typedef struct S3_WIN16_BRIDGE {
     S3_U16 mode_active;
     S3_U32 selector_original_limit;
     S3_U32 linear_base;
+    S3_U32 max_bank;
+    S3_U16 linear_banking;
     void S3_FAR *window;
     S3_U8 mode_snapshot[S3_BRIDGE_MODE_STATE_BYTES];
 } S3_WIN16_BRIDGE;
@@ -51,6 +53,12 @@ void S3_Win16BridgeInit(S3_WIN16_BRIDGE S3_FAR *bridge);
 int S3_Win16BridgeOpen(S3_WIN16_BRIDGE S3_FAR *bridge,
                        const S3_BRIDGE_OPS S3_FAR *ops,
                        S3_U32 linear_base, S3_U32 aperture_bytes);
+/* Open over a linear framebuffer mapped at linear_base: banks 0..max_bank
+   are reached by moving the selector base in 64 KiB steps instead of
+   ops->set_bank, which is still called once for bank 0. */
+int S3_Win16BridgeOpenLinear(S3_WIN16_BRIDGE S3_FAR *bridge,
+                             const S3_BRIDGE_OPS S3_FAR *ops,
+                             S3_U32 linear_base, S3_U32 max_bank);
 int S3_Win16BridgeSetBank(S3_WIN16_BRIDGE S3_FAR *bridge, S3_U32 bank);
 int S3_Win16BridgeClose(S3_WIN16_BRIDGE S3_FAR *bridge);
 

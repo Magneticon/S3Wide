@@ -11,10 +11,10 @@
 #endif
 
 /* Widest run processed per pass; wider blits are split into chunks. */
-#define S3_ROW_MAX 1280
+#define S3_ROW_MAX S3_ROW_PIXELS_MAX
 
-static S3_U8 s3_dst_row[S3_ROW_MAX];
-static S3_U8 s3_src_row[S3_ROW_MAX];
+static S3_U8 S3_FAR_DATA s3_dst_row[S3_ROW_BYTES_MAX];
+static S3_U8 S3_FAR_DATA s3_src_row[S3_ROW_BYTES_MAX];
 
 int S3_BindTarget(void S3_FAR *device, S3_TARGET S3_FAR *target)
 {

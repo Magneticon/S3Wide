@@ -1,13 +1,180 @@
 #include "s3_abi.h"
 #include "s3_device.h"
 #include "s3_trace.h"
+#include "s3_mode.h"
+#include "s3_display.h"
+#include "s3_swcursor.h"
 #if !defined(S3_HOST_TEST)
 #include <string.h>
+#include <i86.h>
 #include "s3_win16_hw.h"
 #include "s3_win16_native.h"
+#include "s3_vbe.h"
 #endif
 
 static S3_DEVICE_RUNTIME s3_display_runtime;
+
+#if !defined(S3_HOST_TEST)
+/* Software cursor (VBE backend): its own surface over the linear
+   framebuffer through a second selector, moved with DPMI 0007h so the
+   interrupt-time path needs no KERNEL call. */
+static S3_SWCURSOR s3_swcursor;
+static S3_SURFACE s3_cursor_surface;
+static S3_U16 s3_cursor_selector;
+static S3_U16 s3_swcursor_active;
+
+static S3_U16 s3_dpmi_alloc_selector(void)
+{
+    S3_U16 selector, failed;
+    __asm {
+        xor ax, ax
+        mov cx, 1
+        int 31h
+        sbb cx, cx
+        mov selector, ax
+        mov failed, cx
+    }
+    return failed ? 0 : selector;
+}
+
+static int s3_dpmi_set_base(S3_U16 selector, S3_U32 base)
+{
+    S3_U16 hi = (S3_U16)(base >> 16), lo = (S3_U16)base, failed;
+    __asm {
+        mov ax, 0007h
+        mov bx, selector
+        mov cx, hi
+        mov dx, lo
+        int 31h
+        sbb ax, ax
+        mov failed, ax
+    }
+    return !failed;
+}
+
+static int s3_dpmi_set_limit(S3_U16 selector, S3_U16 limit)
+{
+    S3_U16 failed;
+    __asm {
+        mov ax, 0008h
+        mov bx, selector
+        xor cx, cx
+        mov dx, limit
+        int 31h
+        sbb ax, ax
+        mov failed, ax
+    }
+    return !failed;
+}
+
+static void s3_dpmi_free_selector(S3_U16 selector)
+{
+    __asm {
+        mov ax, 0001h
+        mov bx, selector
+        int 31h
+    }
+}
+
+static S3_U8 S3_FAR *S3_FAR S3_PASCAL s3_cursor_map_bank(void S3_FAR *context,
+                                                         S3_U32 bank)
+{
+    (void)context;
+    if (!s3_dpmi_set_base(s3_cursor_selector,
+                          s3_mode.lfb_linear + (bank << 16))) {
+        return (S3_U8 S3_FAR *)0;
+    }
+    return (S3_U8 S3_FAR *)MK_FP(s3_cursor_selector, 0);
+}
+
+static void s3_swcursor_start(void)
+{
+    S3_U16 selector;
+    if (s3_mode.backend != S3_BACKEND_VBE || s3_swcursor_active) return;
+    selector = s3_dpmi_alloc_selector();
+    if (selector == 0) return;
+    if (!s3_dpmi_set_limit(selector, 0xFFFFU) ||
+        !s3_dpmi_set_base(selector, s3_mode.lfb_linear)) {
+        s3_dpmi_free_selector(selector);
+        return;
+    }
+    s3_cursor_selector = selector;
+    if (!S3_SurfaceInit(&s3_cursor_surface, s3_mode.width, s3_mode.height,
+                        s3_mode.pitch, s3_mode.framebuffer_bytes,
+                        S3_BANK_BYTES, S3_BANK_BYTES,
+                        (S3_U8 S3_FAR *)MK_FP(selector, 0),
+                        (void S3_FAR *)0, s3_cursor_map_bank)) {
+        s3_dpmi_free_selector(selector);
+        s3_cursor_selector = 0;
+        return;
+    }
+    s3_cursor_surface.bytes_pixel = s3_mode.bytes_pixel;
+    S3_SwCursorInit(&s3_swcursor, &s3_cursor_surface);
+    s3_swcursor_active = 1;
+    S3_TRACE_EVENT("swcursor.start", selector, 0);
+}
+
+static void s3_swcursor_stop(void)
+{
+    if (!s3_swcursor_active) return;
+    /* Hide it and keep it held so interrupt-time calls draw nothing. */
+    S3_SwCursorExclude(&s3_swcursor);
+    s3_swcursor_active = 0;
+    s3_dpmi_free_selector(s3_cursor_selector);
+    s3_cursor_selector = 0;
+}
+
+int S3_DisplaySwCursorActive(void)
+{
+    return s3_swcursor_active;
+}
+
+int S3_DisplaySwCursorShape(const S3_CURSORSHAPE16 S3_FAR *shape)
+{
+    if (!s3_swcursor_active) return shape == (const S3_CURSORSHAPE16 S3_FAR *)0;
+    return S3_SwCursorSetShape(&s3_swcursor, shape);
+}
+
+void S3_DisplaySwCursorMove(S3_I16 x, S3_I16 y)
+{
+    if (s3_swcursor_active) S3_SwCursorMove(&s3_swcursor, x, y);
+}
+
+void S3_DisplaySwCursorCheck(void)
+{
+    if (s3_swcursor_active) S3_SwCursorCheck(&s3_swcursor);
+}
+
+int S3_DisplayExclude(const void S3_FAR *device, const void S3_FAR *other)
+{
+    if (!s3_swcursor_active) return 0;
+    if ((device == (const void S3_FAR *)0 ||
+         ((const S3_PDEV S3_FAR *)device)->pdType != S3_PDEV_DISPLAY) &&
+        (other == (const void S3_FAR *)0 ||
+         ((const S3_PDEV S3_FAR *)other)->pdType != S3_PDEV_DISPLAY)) {
+        return 0;
+    }
+    S3_SwCursorExclude(&s3_swcursor);
+    return 1;
+}
+
+void S3_DisplayUnexclude(int excluded)
+{
+    if (excluded && s3_swcursor_active) S3_SwCursorUnexclude(&s3_swcursor);
+}
+#else
+int S3_DisplayExclude(const void S3_FAR *device, const void S3_FAR *other)
+{
+    (void)device;
+    (void)other;
+    return 0;
+}
+
+void S3_DisplayUnexclude(int excluded)
+{
+    (void)excluded;
+}
+#endif
 
 #if !defined(S3_HOST_TEST)
 /* Program 1280x720x8 through direct VGA/S3 port I/O and map the 64 KiB A000
@@ -34,7 +201,9 @@ static int s3_enable_display(S3_PDEV S3_FAR *device, S3_U16 style)
         return 1;
     }
     _fmemset(&ops, 0, sizeof(ops));
-    if (!S3_Win16NativeSelectorOps(&ops) || !S3_Win16PortModeOps(&ops)) {
+    if (!S3_Win16NativeSelectorOps(&ops) ||
+        !(s3_mode.backend == S3_BACKEND_VBE ? S3_VbeModeOps(&ops)
+                                             : S3_Win16PortModeOps(&ops))) {
         S3_TRACE_EVENT("Enable.device.noops", style, 0);
         return 0;
     }
@@ -43,6 +212,7 @@ static int s3_enable_display(S3_PDEV S3_FAR *device, S3_U16 style)
                        s3_display_runtime.cleanup_pending);
         return 0;
     }
+    s3_swcursor_start();
     S3_TRACE_EVENT("Enable.device.ok", style, 0);
     return 1;
 }
@@ -55,7 +225,7 @@ int S3_DisplayWriteOffscreen(S3_U32 offset, const S3_U8 S3_FAR *data,
                              S3_U16 bytes)
 {
     S3_U8 S3_FAR *window;
-    if (!s3_display_runtime.enabled ||
+    if (!s3_display_runtime.enabled || s3_mode.backend != S3_BACKEND_S3 ||
         (offset & 0xFFFFUL) + bytes > 0x10000UL ||
         !S3_Win16BridgeSetBank(&s3_display_runtime.bridge, offset >> 16)) {
         return 0;
@@ -76,6 +246,10 @@ int S3_FAR S3_PASCAL Enable(void S3_FAR *device, S3_I16 style,
     (void)output_file;
     (void)extra_info;
     S3_TRACE_EVENT("Enable", style, device == (void S3_FAR *)0);
+    if (!S3_ModeSelect()) {
+        S3_TRACE_EVENT("Enable.nomode", style, 0);
+        return 0;
+    }
     if (style & (S3_I16)S3_INQUIRE_INFO) {
         if (device == (void S3_FAR *)0 || !S3_BuildGDIInfo((S3_GDIINFO S3_FAR *)device)) {
             S3_TRACE_EVENT("Enable.inquire.fail", style, 0);
@@ -128,6 +302,9 @@ int S3_FAR S3_PASCAL Disable(void S3_FAR *device)
        mode/I-O provider is available. If a future injected provider enabled
        the device, keep bridge state intact when restore/free needs retry. */
     S3_TRACE_EVENT("Disable", 0, 0);
+#if !defined(S3_HOST_TEST)
+    s3_swcursor_stop();
+#endif
     if (!s3_display_runtime.initialized) {
         S3_DeviceRuntimeInit(&s3_display_runtime);
     }

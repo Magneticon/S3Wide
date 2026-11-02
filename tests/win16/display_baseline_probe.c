@@ -12,7 +12,8 @@
 #define SCREEN_PATH "D:\\OUTPUT\\SCREEN.BMP"
 #define READY_PATH "D:\\OUTPUT\\READY.TXT"
 #define SETTLE_MS 8000UL
-#define BAND_ROWS 16
+/* Most rows per readback band; fewer when a band would pass 64 KiB. */
+#define MAX_BAND_ROWS 16
 
 static HFILE result_file = HFILE_ERROR;
 
@@ -74,7 +75,8 @@ static int capture_screen(HDC screen)
     int width = GetDeviceCaps(screen, HORZRES);
     int height = GetDeviceCaps(screen, VERTRES);
     DWORD row_bytes = (((DWORD)width * 3UL) + 3UL) & ~3UL;
-    DWORD band_bytes = row_bytes * BAND_ROWS;
+    int band_rows = MAX_BAND_ROWS;
+    DWORD band_bytes;
     BITMAPFILEHEADER file_header;
     BITMAPINFO info;
     HGLOBAL band_memory;
@@ -87,7 +89,13 @@ static int capture_screen(HDC screen)
     int rows;
     int stage = 0;
 
-    if (width <= 0 || height <= 0 || (height % BAND_ROWS) != 0 ||
+    /* The largest band that fits one segment and divides the height. */
+    while (band_rows > 1 &&
+           (row_bytes * band_rows > 65520UL || height % band_rows != 0)) {
+        --band_rows;
+    }
+    band_bytes = row_bytes * band_rows;
+    if (width <= 0 || height <= 0 || (height % band_rows) != 0 ||
         band_bytes > 65520UL || sizeof(file_header) != 14) {
         return 1;
     }
@@ -98,7 +106,7 @@ static int capture_screen(HDC screen)
     }
     band = (char FAR *)GlobalLock(band_memory);
     memory_dc = CreateCompatibleDC(screen);
-    band_bitmap = CreateCompatibleBitmap(screen, width, BAND_ROWS);
+    band_bitmap = CreateCompatibleBitmap(screen, width, band_rows);
     image = _lcreat(SCREEN_PATH, 0);
     if (band == (char FAR *)0 || memory_dc == (HDC)0 ||
         band_bitmap == (HBITMAP)0 || image == HFILE_ERROR) {
@@ -109,7 +117,7 @@ static int capture_screen(HDC screen)
     _fmemset(&info, 0, sizeof(info));
     info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     info.bmiHeader.biWidth = width;
-    info.bmiHeader.biHeight = BAND_ROWS;
+    info.bmiHeader.biHeight = band_rows;
     info.bmiHeader.biPlanes = 1;
     info.bmiHeader.biBitCount = 24;
     info.bmiHeader.biCompression = BI_RGB;
@@ -122,21 +130,21 @@ static int capture_screen(HDC screen)
     _lwrite(image, (LPCSTR)&file_header, sizeof(file_header));
     info.bmiHeader.biHeight = height;
     _lwrite(image, (LPCSTR)&info.bmiHeader, sizeof(BITMAPINFOHEADER));
-    info.bmiHeader.biHeight = BAND_ROWS;
+    info.bmiHeader.biHeight = band_rows;
 
     /* BMP rows are bottom-up: walk bands from the bottom of the screen. */
-    for (top = height - BAND_ROWS; top >= 0; top -= BAND_ROWS) {
+    for (top = height - band_rows; top >= 0; top -= band_rows) {
         old_bitmap = (HBITMAP)SelectObject(memory_dc, band_bitmap);
-        if (!BitBlt(memory_dc, 0, 0, width, BAND_ROWS, screen, 0, top, SRCCOPY)) {
+        if (!BitBlt(memory_dc, 0, 0, width, band_rows, screen, 0, top, SRCCOPY)) {
             SelectObject(memory_dc, old_bitmap);
             stage = 4;
             break;
         }
         /* GetDIBits requires the bitmap not to be selected into a DC. */
         SelectObject(memory_dc, old_bitmap);
-        rows = GetDIBits(screen, band_bitmap, 0, BAND_ROWS, band,
+        rows = GetDIBits(screen, band_bitmap, 0, band_rows, band,
                          &info, DIB_RGB_COLORS);
-        if (rows != BAND_ROWS) {
+        if (rows != band_rows) {
             put_int("GETDIBITS_ROWS", (long)rows);
             stage = 5;
             break;
