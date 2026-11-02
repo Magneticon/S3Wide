@@ -36,5 +36,7 @@ wcl -q -zW -bt=windows -ml -i="$WATCOM/h/win" \
 wcl -q -zW -bt=windows -ml -i="$WATCOM/h/win" \
     -fo=../../build/display_rle_probe.obj \
     -fe=../../build/DISPRLE.EXE display_rle_probe.c
-wcl -q -zW -bt=windows -ml -i="$WATCOM/h/win" \n    -fo=../../build/display_huge_probe.obj \n    -fe=../../build/DISPHUGE.EXE display_huge_probe.c
+wcl -q -zW -bt=windows -ml -i="$WATCOM/h/win" \
+    -fo=../../build/display_huge_probe.obj \
+    -fe=../../build/DISPHUGE.EXE display_huge_probe.c
 echo "Built build/DISPBASE.EXE, build/S3AUTO.EXE, build/DISPBNCH.EXE, build/DISPRLE.EXE and build/DISPHUGE.EXE (not executed by this script)."
