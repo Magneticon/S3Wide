@@ -1,0 +1,257 @@
+; ---------------------------------------------------------------
+; S3Wide display driver for Windows 3.1 / Windows for Workgroups 3.11
+; Install with Windows Setup: Options, Change System Settings,
+; Display, "Other display (Requires disk from OEM)...", then the
+; folder that holds this file and S3WIDE.DRV.
+;
+; Every entry uses the same driver; the mode goes to [s3wide.drv] in
+; SYSTEM.INI (Width, Height, Depth). If the video BIOS lacks the mode,
+; the driver starts in the largest one it can draw that is no larger.
+; 1280x720 256 colors on an S3 Trio64 uses the S3 registers directly.
+; ---------------------------------------------------------------
+
+[data]
+    Version="3.10"
+
+[disks]
+    2 =. ,"Microsoft Windows for Workgroups 3.11 Disk 2",disk2
+
+[oemdisks]
+    W =. ,"S3Wide display driver",s3widedisk
+
+[display]
+;profile  = driver,       description,                        resolution,  286gr, logo code,     VDD,       386grabber, ega.sys, logo data,    work section
+sw01p    = W:s3wide.drv, "S3Wide  640x480  256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw01p
+sw01h    = W:s3wide.drv, "S3Wide  640x480  65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw01h
+sw01t    = W:s3wide.drv, "S3Wide  640x480  16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw01t
+sw02p    = W:s3wide.drv, "S3Wide  800x600  256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw02p
+sw02h    = W:s3wide.drv, "S3Wide  800x600  65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw02h
+sw02t    = W:s3wide.drv, "S3Wide  800x600  16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw02t
+sw03p    = W:s3wide.drv, "S3Wide 1024x768  256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw03p
+sw03h    = W:s3wide.drv, "S3Wide 1024x768  65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw03h
+sw03t    = W:s3wide.drv, "S3Wide 1024x768  16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw03t
+sw04p    = W:s3wide.drv, "S3Wide 1280x720  256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw04p
+sw04h    = W:s3wide.drv, "S3Wide 1280x720  65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw04h
+sw04t    = W:s3wide.drv, "S3Wide 1280x720  16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw04t
+sw05p    = W:s3wide.drv, "S3Wide 1280x800  256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw05p
+sw05h    = W:s3wide.drv, "S3Wide 1280x800  65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw05h
+sw05t    = W:s3wide.drv, "S3Wide 1280x800  16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw05t
+sw06p    = W:s3wide.drv, "S3Wide 1280x1024 256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw06p
+sw06h    = W:s3wide.drv, "S3Wide 1280x1024 65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw06h
+sw06t    = W:s3wide.drv, "S3Wide 1280x1024 16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw06t
+sw07p    = W:s3wide.drv, "S3Wide 1366x768  256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw07p
+sw07h    = W:s3wide.drv, "S3Wide 1366x768  65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw07h
+sw07t    = W:s3wide.drv, "S3Wide 1366x768  16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw07t
+sw08p    = W:s3wide.drv, "S3Wide 1600x900  256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw08p
+sw08h    = W:s3wide.drv, "S3Wide 1600x900  65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw08h
+sw08t    = W:s3wide.drv, "S3Wide 1600x900  16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw08t
+sw09p    = W:s3wide.drv, "S3Wide 1600x1200 256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw09p
+sw09h    = W:s3wide.drv, "S3Wide 1600x1200 65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw09h
+sw09t    = W:s3wide.drv, "S3Wide 1600x1200 16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw09t
+sw10p    = W:s3wide.drv, "S3Wide 1920x1080 256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw10p
+sw10h    = W:s3wide.drv, "S3Wide 1920x1080 65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw10h
+sw10t    = W:s3wide.drv, "S3Wide 1920x1080 16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw10t
+sw11p    = W:s3wide.drv, "S3Wide 1920x1200 256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw11p
+sw11h    = W:s3wide.drv, "S3Wide 1920x1200 65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw11h
+sw11t    = W:s3wide.drv, "S3Wide 1920x1200 16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw11t
+sw12p    = W:s3wide.drv, "S3Wide 2560x1440 256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw12p
+sw12h    = W:s3wide.drv, "S3Wide 2560x1440 65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw12h
+sw12t    = W:s3wide.drv, "S3Wide 2560x1440 16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw12t
+sw13p    = W:s3wide.drv, "S3Wide 3840x2160 256 colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw13p
+sw13h    = W:s3wide.drv, "S3Wide 3840x2160 65K colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw13h
+sw13t    = W:s3wide.drv, "S3Wide 3840x2160 16M colors"       , "100,96,96", , 2:vgalogo.lgo, x:*vddvga, 2:vga.3gr,,  2:vgalogo.rle, sw13t
+
+[sw01p]
+,,system.ini,s3wide.drv,"Width=","Width=640"
+,,system.ini,s3wide.drv,"Height=","Height=480"
+,,system.ini,s3wide.drv,"Depth=","Depth=8"
+
+[sw01h]
+,,system.ini,s3wide.drv,"Width=","Width=640"
+,,system.ini,s3wide.drv,"Height=","Height=480"
+,,system.ini,s3wide.drv,"Depth=","Depth=16"
+
+[sw01t]
+,,system.ini,s3wide.drv,"Width=","Width=640"
+,,system.ini,s3wide.drv,"Height=","Height=480"
+,,system.ini,s3wide.drv,"Depth=","Depth=32"
+
+[sw02p]
+,,system.ini,s3wide.drv,"Width=","Width=800"
+,,system.ini,s3wide.drv,"Height=","Height=600"
+,,system.ini,s3wide.drv,"Depth=","Depth=8"
+
+[sw02h]
+,,system.ini,s3wide.drv,"Width=","Width=800"
+,,system.ini,s3wide.drv,"Height=","Height=600"
+,,system.ini,s3wide.drv,"Depth=","Depth=16"
+
+[sw02t]
+,,system.ini,s3wide.drv,"Width=","Width=800"
+,,system.ini,s3wide.drv,"Height=","Height=600"
+,,system.ini,s3wide.drv,"Depth=","Depth=32"
+
+[sw03p]
+,,system.ini,s3wide.drv,"Width=","Width=1024"
+,,system.ini,s3wide.drv,"Height=","Height=768"
+,,system.ini,s3wide.drv,"Depth=","Depth=8"
+
+[sw03h]
+,,system.ini,s3wide.drv,"Width=","Width=1024"
+,,system.ini,s3wide.drv,"Height=","Height=768"
+,,system.ini,s3wide.drv,"Depth=","Depth=16"
+
+[sw03t]
+,,system.ini,s3wide.drv,"Width=","Width=1024"
+,,system.ini,s3wide.drv,"Height=","Height=768"
+,,system.ini,s3wide.drv,"Depth=","Depth=32"
+
+[sw04p]
+,,system.ini,s3wide.drv,"Width=","Width=1280"
+,,system.ini,s3wide.drv,"Height=","Height=720"
+,,system.ini,s3wide.drv,"Depth=","Depth=8"
+
+[sw04h]
+,,system.ini,s3wide.drv,"Width=","Width=1280"
+,,system.ini,s3wide.drv,"Height=","Height=720"
+,,system.ini,s3wide.drv,"Depth=","Depth=16"
+
+[sw04t]
+,,system.ini,s3wide.drv,"Width=","Width=1280"
+,,system.ini,s3wide.drv,"Height=","Height=720"
+,,system.ini,s3wide.drv,"Depth=","Depth=32"
+
+[sw05p]
+,,system.ini,s3wide.drv,"Width=","Width=1280"
+,,system.ini,s3wide.drv,"Height=","Height=800"
+,,system.ini,s3wide.drv,"Depth=","Depth=8"
+
+[sw05h]
+,,system.ini,s3wide.drv,"Width=","Width=1280"
+,,system.ini,s3wide.drv,"Height=","Height=800"
+,,system.ini,s3wide.drv,"Depth=","Depth=16"
+
+[sw05t]
+,,system.ini,s3wide.drv,"Width=","Width=1280"
+,,system.ini,s3wide.drv,"Height=","Height=800"
+,,system.ini,s3wide.drv,"Depth=","Depth=32"
+
+[sw06p]
+,,system.ini,s3wide.drv,"Width=","Width=1280"
+,,system.ini,s3wide.drv,"Height=","Height=1024"
+,,system.ini,s3wide.drv,"Depth=","Depth=8"
+
+[sw06h]
+,,system.ini,s3wide.drv,"Width=","Width=1280"
+,,system.ini,s3wide.drv,"Height=","Height=1024"
+,,system.ini,s3wide.drv,"Depth=","Depth=16"
+
+[sw06t]
+,,system.ini,s3wide.drv,"Width=","Width=1280"
+,,system.ini,s3wide.drv,"Height=","Height=1024"
+,,system.ini,s3wide.drv,"Depth=","Depth=32"
+
+[sw07p]
+,,system.ini,s3wide.drv,"Width=","Width=1366"
+,,system.ini,s3wide.drv,"Height=","Height=768"
+,,system.ini,s3wide.drv,"Depth=","Depth=8"
+
+[sw07h]
+,,system.ini,s3wide.drv,"Width=","Width=1366"
+,,system.ini,s3wide.drv,"Height=","Height=768"
+,,system.ini,s3wide.drv,"Depth=","Depth=16"
+
+[sw07t]
+,,system.ini,s3wide.drv,"Width=","Width=1366"
+,,system.ini,s3wide.drv,"Height=","Height=768"
+,,system.ini,s3wide.drv,"Depth=","Depth=32"
+
+[sw08p]
+,,system.ini,s3wide.drv,"Width=","Width=1600"
+,,system.ini,s3wide.drv,"Height=","Height=900"
+,,system.ini,s3wide.drv,"Depth=","Depth=8"
+
+[sw08h]
+,,system.ini,s3wide.drv,"Width=","Width=1600"
+,,system.ini,s3wide.drv,"Height=","Height=900"
+,,system.ini,s3wide.drv,"Depth=","Depth=16"
+
+[sw08t]
+,,system.ini,s3wide.drv,"Width=","Width=1600"
+,,system.ini,s3wide.drv,"Height=","Height=900"
+,,system.ini,s3wide.drv,"Depth=","Depth=32"
+
+[sw09p]
+,,system.ini,s3wide.drv,"Width=","Width=1600"
+,,system.ini,s3wide.drv,"Height=","Height=1200"
+,,system.ini,s3wide.drv,"Depth=","Depth=8"
+
+[sw09h]
+,,system.ini,s3wide.drv,"Width=","Width=1600"
+,,system.ini,s3wide.drv,"Height=","Height=1200"
+,,system.ini,s3wide.drv,"Depth=","Depth=16"
+
+[sw09t]
+,,system.ini,s3wide.drv,"Width=","Width=1600"
+,,system.ini,s3wide.drv,"Height=","Height=1200"
+,,system.ini,s3wide.drv,"Depth=","Depth=32"
+
+[sw10p]
+,,system.ini,s3wide.drv,"Width=","Width=1920"
+,,system.ini,s3wide.drv,"Height=","Height=1080"
+,,system.ini,s3wide.drv,"Depth=","Depth=8"
+
+[sw10h]
+,,system.ini,s3wide.drv,"Width=","Width=1920"
+,,system.ini,s3wide.drv,"Height=","Height=1080"
+,,system.ini,s3wide.drv,"Depth=","Depth=16"
+
+[sw10t]
+,,system.ini,s3wide.drv,"Width=","Width=1920"
+,,system.ini,s3wide.drv,"Height=","Height=1080"
+,,system.ini,s3wide.drv,"Depth=","Depth=32"
+
+[sw11p]
+,,system.ini,s3wide.drv,"Width=","Width=1920"
+,,system.ini,s3wide.drv,"Height=","Height=1200"
+,,system.ini,s3wide.drv,"Depth=","Depth=8"
+
+[sw11h]
+,,system.ini,s3wide.drv,"Width=","Width=1920"
+,,system.ini,s3wide.drv,"Height=","Height=1200"
+,,system.ini,s3wide.drv,"Depth=","Depth=16"
+
+[sw11t]
+,,system.ini,s3wide.drv,"Width=","Width=1920"
+,,system.ini,s3wide.drv,"Height=","Height=1200"
+,,system.ini,s3wide.drv,"Depth=","Depth=32"
+
+[sw12p]
+,,system.ini,s3wide.drv,"Width=","Width=2560"
+,,system.ini,s3wide.drv,"Height=","Height=1440"
+,,system.ini,s3wide.drv,"Depth=","Depth=8"
+
+[sw12h]
+,,system.ini,s3wide.drv,"Width=","Width=2560"
+,,system.ini,s3wide.drv,"Height=","Height=1440"
+,,system.ini,s3wide.drv,"Depth=","Depth=16"
+
+[sw12t]
+,,system.ini,s3wide.drv,"Width=","Width=2560"
+,,system.ini,s3wide.drv,"Height=","Height=1440"
+,,system.ini,s3wide.drv,"Depth=","Depth=32"
+
+[sw13p]
+,,system.ini,s3wide.drv,"Width=","Width=3840"
+,,system.ini,s3wide.drv,"Height=","Height=2160"
+,,system.ini,s3wide.drv,"Depth=","Depth=8"
+
+[sw13h]
+,,system.ini,s3wide.drv,"Width=","Width=3840"
+,,system.ini,s3wide.drv,"Height=","Height=2160"
+,,system.ini,s3wide.drv,"Depth=","Depth=16"
+
+[sw13t]
+,,system.ini,s3wide.drv,"Width=","Width=3840"
+,,system.ini,s3wide.drv,"Height=","Height=2160"
+,,system.ini,s3wide.drv,"Depth=","Depth=32"

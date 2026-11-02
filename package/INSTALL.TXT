@@ -17,7 +17,8 @@ Nothing is stretched: Windows really runs at the resolution you choose.
 
 Files
 -----
-S3WIDE.DRV    the driver (copy to WINDOWS\SYSTEM)
+S3WIDE.DRV    the driver
+OEMSETUP.INF  lets Windows Setup install it and list its modes
 VBEMODES.EXE  DOS tool that lists the VESA modes of this machine and says
               which ones S3WIDE.DRV can use (s3wide=yes)
 INSTALL.TXT   this file
@@ -45,8 +46,32 @@ and read MODES.TXT. Each line is one mode, for example
 Pick a line that says s3wide=yes. If none do, the BIOS has no VBE 2.0
 linear frame buffer and only the S3 Trio64 1280x720x8 mode can work.
 
-Install
--------
+Install with Windows Setup
+--------------------------
+1. Unpack the files into one folder, for example C:\S3WIDE (or a floppy).
+2. In Program Manager open Main, Windows Setup. Choose Options, Change
+   System Settings.
+3. Open the Display list and pick the last entry,
+   "Other display (Requires disk from OEM)...". Type the folder
+   (C:\S3WIDE) and press OK.
+4. Pick an "S3Wide ..." entry, for example "S3Wide 1920x1080 65K colors".
+   Use a mode VBEMODES marked s3wide=yes.
+5. Setup may ask whether to use the current or the new driver: choose
+   New. If it asks for "Microsoft Windows for Workgroups 3.11 Disk 2"
+   (for VGA.3GR and the start-up logo, which are already installed),
+   type C:\WINDOWS\SYSTEM. If it asks for the "S3Wide display driver"
+   disk, type the folder from step 1.
+6. Restart Windows when Setup offers it.
+
+To change the mode later, repeat steps 2 to 6 and pick another entry, or
+edit Width, Height and Depth in the [s3wide.drv] section of SYSTEM.INI.
+
+Every entry installs the same driver with small (96 dpi) fonts; Setup
+writes display.drv=s3wide.drv, 386grabber=vga.3gr, display=*vddvga and
+the [s3wide.drv] section.
+
+Install by hand
+---------------
 1. Copy S3WIDE.DRV into WINDOWS\SYSTEM.
 2. Edit WINDOWS\SYSTEM.INI:
 

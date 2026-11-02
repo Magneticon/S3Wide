@@ -91,8 +91,25 @@ every run:
 | 1920x1080x16 | svga_dosbox | Full GDI readback, desktop correct |
 | 3840x2160x32 | svga_dosbox | Full GDI readback, desktop correct |
 
-The package (driver, VBEMODES.EXE, [INSTALL.TXT](../../INSTALL.TXT),
+The package (driver, VBEMODES.EXE, [INSTALL.TXT](../../../package/INSTALL.TXT), OEMSETUP.INF,
 checksums) is assembled locally under `output/release/`.
 
-Not tested: real hardware, windowed DOS boxes, Video for Windows, switching
+## Windows Setup (OEMSETUP.INF)
+
+`package/OEMSETUP.INF` (written by `package/make_oemsetup.py`) offers 39
+entries: 13 resolutions from 640x480 to 3840x2160, each at 256, 65K and 16M
+colours. Every entry installs S3WIDE.DRV with small fonts ("100,96,96"),
+*vddvga, VGA.3GR and the VGA logo, and its work section writes Width,
+Height and Depth to `[s3wide.drv]` in SYSTEM.INI. The line format and the
+work-section syntax are those of WfW 3.11's own SETUP.INF (and of the
+vbesvga OEMSETUP.INF). SETUP.EXE contains the `oemsetup.inf` and
+`oemdisks` strings it reads. Profile and section names stay within 8
+characters, as in SETUP.INF. `package/make-package.sh` builds the zip.
+
+The INF has not been run through Setup here. Driving DOS-mode SETUP with
+DOSBox-X AUTOTYPE reached the "Other" disk prompt, but keystrokes were then
+lost or stalled from run to run, so that experiment proved nothing either
+way.
+
+Not tested: real hardware, Windows Setup with the OEMSETUP.INF, windowed DOS boxes, Video for Windows, switching
 with Alt+Tab or Alt+Enter by hand.

@@ -40,7 +40,7 @@ allow high definition vesa modes=true
 
 The emulated S3 cards (`svga_s3*`) report at most 16 MB and list modes up to 1920x1440, so they cannot provide 4K.
 
-The VESA path draws with the CPU. Full-screen fills take about 0.1 to 0.5 s of emulated time at 3840x2160x32 (at a fixed 100,000 cycles); [the speed notes](docs/research/20261102-4k-speed/README.md) have the measurements and the `DISPBNCH.EXE` benchmark. Install steps, recovery and known limits for testing on a real Windows 3.11 installation are in [docs/INSTALL.TXT](docs/INSTALL.TXT); the review and release checks are in [the release notes](docs/research/20261102-release-review/README.md). The driver requires a 386 or later. On a slow host, DOSBox-X's `frameskip` (under `[render]`) leaves more time for emulation at 4K.
+The VESA path draws with the CPU. Full-screen fills take about 0.1 to 0.5 s of emulated time at 3840x2160x32 (at a fixed 100,000 cycles); [the speed notes](docs/research/20261102-4k-speed/README.md) have the measurements and the `DISPBNCH.EXE` benchmark. Install steps, recovery and known limits for testing on a real Windows 3.11 installation are in [package/INSTALL.TXT](package/INSTALL.TXT) (Windows Setup can install it from `package/OEMSETUP.INF`); the review and release checks are in [the release notes](docs/research/20261102-release-review/README.md). The driver requires a 386 or later. On a slow host, DOSBox-X's `frameskip` (under `[render]`) leaves more time for emulation at 4K.
 
 ## Target environment
 
