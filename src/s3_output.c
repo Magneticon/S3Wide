@@ -71,6 +71,7 @@ int S3_OutputScanlines(void S3_FAR *destination, S3_U16 count,
         if (pen == (const S3_PPEN16 S3_FAR *)0) return 0;
         pen_brush.style = S3_BS_SOLID;
         pen_brush.has_mask = 0;
+        pen_brush.mono = 0;
         pen_pixel = S3_PhysicalToPixel(pen->color);
         for (k = 0; k < S3_BRUSH_SIZE * S3_BRUSH_SIZE; ++k) pen_brush.color[k] = pen_pixel;
         for (k = 0; k < sizeof(pen_brush.mask); ++k) pen_brush.mask[k] = 0xFF;

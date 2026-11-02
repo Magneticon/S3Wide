@@ -209,3 +209,16 @@ void S3_SwCursorUnexclude(S3_SWCURSOR S3_FAR *cursor)
     if (cursor->busy == 1) s3_redraw_if_moved(cursor);
     s3_leave(cursor);
 }
+
+void S3_SwCursorSuspend(S3_SWCURSOR S3_FAR *cursor)
+{
+    S3_U16 flags = s3_irq_save();
+    ++cursor->busy;
+    cursor->drawn = 0;
+    s3_irq_restore(flags);
+}
+
+void S3_SwCursorResume(S3_SWCURSOR S3_FAR *cursor)
+{
+    S3_SwCursorUnexclude(cursor);
+}

@@ -1,4 +1,5 @@
 #include "s3_win16_hw.h"
+#include "s3_vbe.h"
 #include "s3_hw.h"
 #include "s3_trace.h"
 #include <conio.h>
@@ -101,6 +102,13 @@ static void s3_enable_ac_display(void)
     outp(0x3C0, 0x20);
 }
 
+/* The BIOS mode and S3 system-register lock (CR39) in effect before
+   Enable. Real Trio64 boards may leave CR39 locked, which ignores writes to
+   CR40-CR6F (mode, bank and cursor registers); the driver keeps it
+   unlocked (A5h) while Windows runs and puts it back on Disable. */
+static S3_U16 s3_bios_mode = 3;
+static S3_U8 s3_saved_cr39;
+
 static int S3_FAR S3_PASCAL s3_capture_mode(void S3_FAR *context,
                                             S3_U8 S3_FAR *buffer, S3_U16 bytes)
 {
@@ -112,8 +120,12 @@ static int S3_FAR S3_PASCAL s3_capture_mode(void S3_FAR *context,
         saved == (S3_SAVED_VGA S3_FAR *)0 || bytes < sizeof(S3_SAVED_VGA)) {
         return 0;
     }
+    s3_bios_mode = S3_BiosGetMode();
     provider->mode_io.crtc_index_port = (inp(0x3CC) & 1) ? 0x3D4 : 0x3B4;
     provider->register_io.crtc_index_port = provider->mode_io.crtc_index_port;
+    outp(provider->mode_io.crtc_index_port, 0x39);
+    s3_saved_cr39 = (S3_U8)inp(provider->mode_io.crtc_index_port + 1);
+    outp(provider->mode_io.crtc_index_port + 1, 0xA5);
     if (!S3_CaptureModeSnapshot(&provider->mode_io, &provider->timing)) {
         return 0;
     }
@@ -226,6 +238,11 @@ static int S3_FAR S3_PASCAL s3_restore_mode(void S3_FAR *context,
     for (i = 0; i < S3_DAC_BYTES; ++i) {
         outp(0x3C9, saved->dac[i]);
     }
+    outp(provider->mode_io.crtc_index_port, 0x39);
+    outp(provider->mode_io.crtc_index_port + 1, s3_saved_cr39);
+    /* The 1280x720 frame overwrote the planes that hold the text and the
+       character set; a BIOS set of the saved mode reloads them. */
+    if (s3_bios_mode < 0x14) S3_BiosSetMode(s3_bios_mode);
     S3_TRACE_EVENT("hw.restore.ok", 0, 0);
     return 1;
 }
@@ -313,6 +330,24 @@ void S3_HwCursorMove(S3_I16 x, S3_I16 y)
     s3_write_crtc(0, 0x3D4, 0x49, (S3_U8)y);
     s3_relock(lock1, lock2);
     outp(0x3D4, index);
+}
+
+int S3_Win16IsTrio64(void)
+{
+    S3_U16 port = (inp(0x3CC) & 1) ? 0x3D4 : 0x3B4;
+    S3_U8 index = (S3_U8)inp(port), lock1, id_high, id_low;
+    outp(port, 0x38);
+    lock1 = (S3_U8)inp(port + 1);
+    outp(port + 1, 0x48);
+    outp(port, 0x2D);
+    id_high = (S3_U8)inp(port + 1);
+    outp(port, 0x2E);
+    id_low = (S3_U8)inp(port + 1);
+    outp(port, 0x38);
+    outp(port + 1, lock1);
+    outp(port, index);
+    S3_TRACE_EVENT("hw.chip", id_high, id_low);
+    return id_high == 0x88 && id_low == 0x11;
 }
 
 int S3_Win16LoadPalette(void)

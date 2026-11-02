@@ -310,14 +310,22 @@ void S3_FillPixels(S3_U8 S3_FAR *out, S3_U32 pixel, S3_U16 count,
 }
 
 /* Brush row for target row y, pixels x .. x+count-1, in target format.
-   The pattern repeats every 8 pixels, so 8 are built and then doubled. */
+   The pattern repeats every 8 pixels, so 8 are built and then doubled.
+   A monochrome pattern brush takes the DRAWMODE colours when there is one
+   (with_mode): 1 bits background, 0 bits foreground (text colour). */
 static void s3_pattern_row(const S3_PBRUSH16 S3_FAR *brush, S3_U16 kind,
-                           S3_U16 bp, S3_I16 x, S3_I16 y, S3_U16 count)
+                           S3_U16 bp, S3_I16 x, S3_I16 y, S3_U16 count,
+                           int with_mode, S3_U32 background, S3_U32 foreground)
 {
     S3_U16 i, done, n = count < 8 ? count : 8;
     S3_U32 p;
     for (i = 0; i < n; ++i) {
-        p = brush->color[(((S3_U16)y & 7) << 3) | ((S3_U16)(x + i) & 7)];
+        if (brush->mono && with_mode) {
+            p = (brush->mask[(S3_U16)y & 7] & (0x80U >> ((S3_U16)(x + i) & 7)))
+                    ? background : foreground;
+        } else {
+            p = brush->color[(((S3_U16)y & 7) << 3) | ((S3_U16)(x + i) & 7)];
+        }
         if (kind == S3_TARGET_MEM1) p = S3_PixelIsLight(p) ? 0xFF : 0x00;
         S3_PixelStore(s3_pat_row + i * bp, p, bp);
     }
@@ -382,8 +390,9 @@ static int s3_rop_target_row(const S3_TARGET S3_FAR *target, S3_I16 x, S3_I16 y,
 static int s3_fill_rows(const S3_TARGET S3_FAR *target, S3_I16 x, S3_I16 y,
                         S3_I16 width, S3_I16 height, S3_U32 pixel)
 {
-    S3_I16 row, chunk_x, chunk;
-    for (chunk_x = 0; chunk_x < width; chunk_x = (S3_I16)(chunk_x + S3_ROW_MAX)) {
+    S3_I16 row, chunk;
+    S3_I32 chunk_x;
+    for (chunk_x = 0; chunk_x < width; chunk_x += S3_ROW_MAX) {
         chunk = (S3_I16)(width - chunk_x);
         if (chunk > S3_ROW_MAX) chunk = S3_ROW_MAX;
         S3_FillPixels(s3_dst_row, pixel, (S3_U16)chunk, target->bytes_pixel);
@@ -428,7 +437,10 @@ int S3_RasterBitBlt(void S3_FAR *destination, S3_I16 dx, S3_I16 dy,
     int use_s = (((rop >> 2) ^ rop) & 0x33) != 0;
     int use_d = (((rop >> 1) ^ rop) & 0x55) != 0;
     S3_U32 background, foreground, p;
-    S3_I16 row, first_row, step, chunk_x, chunk;
+    S3_I16 row, first_row, step, chunk;
+    S3_I32 chunk_x;
+    S3_U16 chunks, k;
+    int right_to_left;
     S3_I16 ty, sy_row;
     S3_U16 bp;
     int plain_copy, in_place;
@@ -479,7 +491,14 @@ int S3_RasterBitBlt(void S3_FAR *destination, S3_I16 dx, S3_I16 dy,
     plain_copy = rop == 0xCC && use_s &&
                  (src.kind == S3_TARGET_MEM1) == (dst.kind == S3_TARGET_MEM1);
 
-    for (chunk_x = 0; chunk_x < width; chunk_x = (S3_I16)(chunk_x + S3_ROW_MAX)) {
+    /* Wider than one row buffer: chunks run right to left when a copy
+       within one target moves pixels right, so no chunk overwrites source
+       columns a later chunk still has to read. */
+    right_to_left = use_s && src.kind == dst.kind && src.bits == dst.bits &&
+                    src.surface == dst.surface && dx > sx;
+    chunks = (S3_U16)(((S3_I32)width + S3_ROW_MAX - 1) / S3_ROW_MAX);
+    for (k = 0; k < chunks; ++k) {
+        chunk_x = (S3_I32)(right_to_left ? chunks - 1 - k : k) * S3_ROW_MAX;
         chunk = (S3_I16)(width - chunk_x);
         if (chunk > S3_ROW_MAX) chunk = S3_ROW_MAX;
         for (row = first_row; row >= 0 && row < height; row = (S3_I16)(row + step)) {
@@ -503,7 +522,8 @@ int S3_RasterBitBlt(void S3_FAR *destination, S3_I16 dx, S3_I16 dy,
             }
             if (use_p) {
                 s3_pattern_row(brush, dst.kind, bp, (S3_I16)(dx + chunk_x), ty,
-                               (S3_U16)chunk);
+                               (S3_U16)chunk, mode != (const S3_DRAWMODE16 S3_FAR *)0,
+                               background, foreground);
                 if (rop == 0xF0) {
                     /* PATCOPY with a pattern brush: the row is the result. */
                     if (!S3_TargetWriteRow(&dst, (S3_I16)(dx + chunk_x), ty,

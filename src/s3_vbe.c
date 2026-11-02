@@ -54,6 +54,23 @@ int S3_VbeModeMatches(const S3_VBE_MODE_INFO S3_FAR *info, S3_U16 width,
     return 0;
 }
 
+S3_U32 S3_VbeModeScore(const S3_VBE_MODE_INFO S3_FAR *info, S3_U16 width,
+                       S3_U16 height, S3_U16 bits_pixel)
+{
+    S3_U32 area;
+    if (S3_VbeModeMatches(info, width, height, bits_pixel)) return S3_VBE_SCORE_EXACT;
+    if (!S3_VbeModeMatches(info, info->width, info->height, info->bits_pixel) ||
+        info->width > width || info->height > height) {
+        return 0;
+    }
+    /* Area < 2^24 (4096 x 3072 at most): same depth in bit 30, area in
+       bits 2..25, depth rank in bits 0..1. */
+    area = (S3_U32)info->width * info->height;
+    if (area >= 0x1000000UL) area = 0xFFFFFFUL;
+    return (info->bits_pixel == bits_pixel ? 0x40000000UL : 0x20000000UL) |
+           (area << 2) | (S3_U32)(info->bits_pixel / 16U);
+}
+
 #if !defined(S3_HOST_TEST)
 #define NOGDI
 #define NODRIVERS
@@ -163,9 +180,9 @@ static int s3_select_vbe(S3_U16 buffer_selector, S3_U16 buffer_segment,
     S3_U8 S3_FAR *buffer = (S3_U8 S3_FAR *)MK_FP(buffer_selector, 0);
     const S3_U8 S3_FAR *oem;
     const S3_U16 S3_FAR *list;
-    S3_U16 version, count = 0, i;
+    S3_U16 version, count = 0, i, best = 0;
     S3_VBE_MODE_INFO info;
-    S3_U32 bytes, linear;
+    S3_U32 bytes, linear, score, best_score = 0;
 
     _fmemcpy(buffer + S3_VBE_INFO_OFFSET, "VBE2", 4);
     if (s3_int10(0x4F00, 0, 0, buffer_segment, S3_VBE_INFO_OFFSET) != 0x004F ||
@@ -175,7 +192,7 @@ static int s3_select_vbe(S3_U16 buffer_selector, S3_U16 buffer_segment,
     }
     version = s3_get16(buffer + 4);
     oem = s3_real_pointer(s3_get32(buffer + 6));
-    *is_s3 = oem != (const S3_U8 S3_FAR *)0 && oem[0] == 'S' && oem[1] == '3';
+    *is_s3 = *is_s3 && oem != (const S3_U8 S3_FAR *)0 && oem[0] == 'S' && oem[1] == '3';
     list = (const S3_U16 S3_FAR *)s3_real_pointer(s3_get32(buffer + 14));
     S3_TRACE_EVENT("vbe.info", version, *is_s3);
     if (list == (const S3_U16 S3_FAR *)0) return 0;
@@ -184,30 +201,48 @@ static int s3_select_vbe(S3_U16 buffer_selector, S3_U16 buffer_segment,
         s3_modes[count] = list[count];
         ++count;
     }
+    /* The exact mode if the BIOS has it; otherwise, except on S3 hardware
+       (whose caller falls back to the native mode), the best smaller one,
+       so Windows still starts on a card without the requested mode. */
     for (i = 0; i < count; ++i) {
         if (s3_int10(0x4F01, 0, s3_modes[i], buffer_segment,
                      S3_VBE_MODE_OFFSET) != 0x004F) {
             continue;
         }
         S3_VbeDecodeModeInfo(buffer + S3_VBE_MODE_OFFSET, version, &info);
-        if (!S3_VbeModeMatches(&info, width, height, depth) ||
-            !S3_ModeSetVBE(&s3_mode, info.width, info.height,
-                           info.bits_pixel, info.pitch, s3_modes[i],
-                           info.lfb_physical)) {
-            continue;
+        score = S3_VbeModeScore(&info, width, height, depth);
+        if (score > best_score && S3_ModeSetVBE(&s3_mode, info.width, info.height,
+                                                info.bits_pixel, info.pitch,
+                                                s3_modes[i], info.lfb_physical)) {
+            best_score = score;
+            best = s3_modes[i];
+            if (score == S3_VBE_SCORE_EXACT) break;
         }
-        bytes = (s3_mode.framebuffer_bytes + 0xFFFFUL) & ~0xFFFFUL;
-        linear = s3_map_physical(s3_mode.lfb_physical, bytes);
-        S3_TRACE_EVENT("vbe.mode", s3_modes[i], (S3_U16)(linear >> 16));
-        if (linear == 0) {
-            S3_ModeDefault(&s3_mode);
-            return 0;
-        }
-        s3_mode.lfb_linear = linear;
-        return 1;
     }
-    S3_TRACE_EVENT("vbe.nomode", width, depth);
-    return 0;
+    if (best_score == 0 || (best_score != S3_VBE_SCORE_EXACT && *is_s3)) {
+        S3_TRACE_EVENT("vbe.nomode", width, depth);
+        S3_ModeDefault(&s3_mode);
+        return 0;
+    }
+    if (s3_int10(0x4F01, 0, best, buffer_segment, S3_VBE_MODE_OFFSET) != 0x004F) {
+        S3_ModeDefault(&s3_mode);
+        return 0;
+    }
+    S3_VbeDecodeModeInfo(buffer + S3_VBE_MODE_OFFSET, version, &info);
+    if (!S3_ModeSetVBE(&s3_mode, info.width, info.height, info.bits_pixel,
+                       info.pitch, best, info.lfb_physical)) {
+        S3_ModeDefault(&s3_mode);
+        return 0;
+    }
+    bytes = (s3_mode.framebuffer_bytes + 0xFFFFUL) & ~0xFFFFUL;
+    linear = s3_map_physical(s3_mode.lfb_physical, bytes);
+    S3_TRACE_EVENT("vbe.mode", best, (S3_U16)(linear >> 16));
+    if (linear == 0) {
+        S3_ModeDefault(&s3_mode);
+        return 0;
+    }
+    s3_mode.lfb_linear = linear;
+    return 1;
 }
 
 int S3_ModeSelect(void)
@@ -245,6 +280,8 @@ int S3_ModeSelect(void)
             is_s3 = oem != (const S3_U8 S3_FAR *)0 && oem[0] == 'S' &&
                     oem[1] == '3';
         }
+        /* Other S3 chips (Trio32, 86x, ViRGE ...) take the VESA path. */
+        if (is_s3) is_s3 = S3_Win16IsTrio64();
     }
     if (is_s3 && width == S3_WIDTH && height == S3_HEIGHT &&
         depth == S3_BITS_PIXEL) {
@@ -262,6 +299,16 @@ int S3_ModeSelect(void)
     S3_TRACE_EVENT("mode.selected", s3_mode.backend, s3_mode.vbe_mode);
     result = found ? 1 : -1;
     return found;
+}
+
+S3_U16 S3_BiosGetMode(void)
+{
+    return (S3_U16)(s3_int10(0x0F00, 0, 0, 0, 0) & 0x7F);
+}
+
+void S3_BiosSetMode(S3_U16 mode)
+{
+    (void)s3_int10((S3_U16)(mode & 0x7F), 0, 0, 0, 0);
 }
 
 static int S3_FAR S3_PASCAL s3_vbe_capture_mode(void S3_FAR *context,

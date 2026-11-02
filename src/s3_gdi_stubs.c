@@ -40,6 +40,7 @@ S3_I16 S3_FAR S3_PASCAL BitBlt(void S3_FAR *destination,
 {
     int ok, excluded;
     S3_RECT16 destination_rect, source_rect;
+    if (S3_DisplayBlocked(destination, source)) return 1;
     S3_DisplaySetRect(&destination_rect, (S3_I16)destination_x, (S3_I16)destination_y,
                       (S3_I32)(S3_I16)destination_x + (S3_I16)width,
                       (S3_I32)(S3_I16)destination_y + (S3_I16)height);
@@ -155,6 +156,7 @@ S3_U16 S3_FAR S3_PASCAL Output(void S3_FAR *destination,
         return s3_output_body(destination, style, point_count, points, physical_pen,
                               physical_brush, draw_mode, clip_rect);
     }
+    if (S3_DisplayBlocked(destination, (void S3_FAR *)0)) return 1;
     if (S3_DisplaySwCursorActive() && points != (S3_POINT16 S3_FAR *)0 &&
         point_count >= 1 &&
         s3_far_pointer_span_fits(points, (S3_U32)point_count * sizeof(S3_POINT16))) {
@@ -316,6 +318,7 @@ S3_U32 S3_FAR S3_PASCAL Pixel(void S3_FAR *destination,
     S3_RECT16 bounds;
     int excluded;
     S3_U32 result;
+    if (S3_DisplayBlocked(destination, (void S3_FAR *)0)) return physical_color;
     S3_DisplaySetRect(&bounds, (S3_I16)x, (S3_I16)y, (S3_I32)(S3_I16)x + 1,
                       (S3_I32)(S3_I16)y + 1);
     excluded = S3_DisplayExclude(destination, &bounds, (void S3_FAR *)0,
@@ -343,9 +346,13 @@ static S3_U16 s3_setdibitstodevice_body(
     (void)draw_mode;
 
     /* Without a translate table (non-palette device) the DIB carries RGB
-       colours: convert any 1/4/8/24-bpp DIB through the generic DIB path.
-       Direct-colour modes always take it. */
-    if (translate == (S3_I16 S3_FAR *)0 || s3_mode.bytes_pixel != 1) {
+       colours: convert any 1/4/8/24-bpp or RLE DIB through the generic DIB
+       path. Direct-colour modes always take it, and so does any DIB the
+       8-bpp band copy below cannot handle. */
+    if (translate == (S3_I16 S3_FAR *)0 || s3_mode.bytes_pixel != 1 ||
+        (bitmap_info != (S3_BITMAPINFO16 S3_FAR *)0 &&
+         (bitmap_info->bmiHeader.biCompression != 0 ||
+          bitmap_info->bmiHeader.biBitCount != 8))) {
         return S3_DibToDevice(destination, (S3_I16)x, (S3_I16)y, scan_start,
                               scan_count, clip_rect, dib_bits, bitmap_info);
     }
@@ -408,6 +415,7 @@ S3_U16 S3_FAR S3_PASCAL SetDIBitsToDevice(
     const S3_RECT16 S3_FAR *use = (const S3_RECT16 S3_FAR *)0;
     int excluded;
     S3_U16 result;
+    if (S3_DisplayBlocked(destination, (void S3_FAR *)0)) return scan_count;
     if (bitmap_info != (S3_BITMAPINFO16 S3_FAR *)0) {
         /* The DIB's rows land between y and y + biHeight. */
         S3_DisplaySetRect(&bounds, (S3_I16)x, (S3_I16)y,

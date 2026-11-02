@@ -48,6 +48,7 @@ int S3_RealizePatternBrush(const S3_BITMAP16 S3_FAR *bitmap,
             physical->mask[row] = bitmap->bmBits[row * (S3_U16)bitmap->bmWidthBytes];
         }
         s3_fill_mask(physical, S3_RGBToPixel(0x00FFFFFFUL), S3_RGBToPixel(0));
+        physical->mono = 1;
         return 1;
     }
     if (bitmap->bmBitsPixel == s3_mode.bits_pixel) {
@@ -60,6 +61,7 @@ int S3_RealizePatternBrush(const S3_BITMAP16 S3_FAR *bitmap,
                                  s3_mode.bytes_pixel);
             }
         }
+        physical->mono = 0;
         return 1;
     }
     return 0;
@@ -77,6 +79,7 @@ int S3_RealizeBrush(const S3_LBRUSH16 S3_FAR *logical,
     }
     physical->style = logical->lbStyle;
     physical->has_mask = 0;
+    physical->mono = 0;
     for (i = 0; i < S3_BRUSH_SIZE; ++i) {
         physical->mask[i] = 0xFF;
     }

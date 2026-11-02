@@ -79,6 +79,13 @@ S3_U32 S3_FAR S3_PASCAL ExtTextOut(void S3_FAR *device, S3_I16 x, S3_I16 y,
         }
     }
 #endif
+    if (count >= 0 && S3_DisplayBlocked(device, (void S3_FAR *)0)) {
+        /* A DOS session owns the screen: report the extent, draw nothing. */
+        return count == 0 ? 1 : S3_TextOut(device, x, y, (const S3_RECT16 S3_FAR *)0,
+                                           (const S3_U8 S3_FAR *)text, (S3_I16)-count,
+                                           font_info, (S3_DRAWMODE16 S3_FAR *)draw_mode,
+                                           char_widths, (const S3_RECT16 S3_FAR *)0, 0);
+    }
     if (count < 0) {
         excluded = 0; /* extent query: draws nothing */
     } else {
@@ -206,6 +213,7 @@ S3_U16 S3_FAR S3_PASCAL FastBorder(S3_RECT16 S3_FAR *rect, S3_U16 h_border,
     int ok, excluded;
 
     if (rect == (S3_RECT16 S3_FAR *)0) return 0;
+    if (S3_DisplayBlocked(device, (void S3_FAR *)0)) return 1;
     l = rect->left;
     t = rect->top;
     r = rect->right;
@@ -283,18 +291,26 @@ S3_U16 S3_FAR S3_PASCAL SetCursor(void S3_FAR *cursor_shape)
         return (S3_U16)(S3_DisplaySwCursorShape(shape) ? 1 : 0);
     }
     s3_cursor_visible = 0;
-    S3_HwCursorEnable(0);
+    if (!S3_SwitchInBackground()) S3_HwCursorEnable(0);
     if (shape == (const S3_CURSORSHAPE16 S3_FAR *)0) {
         return 1; /* hide */
     }
-    if (!S3_CursorPattern(shape, s3_cursor_pattern) ||
-        !S3_DisplayWriteOffscreen(S3_HW_CURSOR_OFFSET, s3_cursor_pattern,
-                                  S3_HW_CURSOR_BYTES)) {
+    if (!S3_CursorPattern(shape, s3_cursor_pattern)) {
         S3_TRACE_EVENT("SetCursor.fail", shape->csWidth, shape->csHeight);
         return 0;
     }
     s3_cursor_hot_x = shape->csHotX;
     s3_cursor_hot_y = shape->csHotY;
+    if (S3_SwitchInBackground()) {
+        /* A DOS session owns the hardware: S3_HwCursorRestore loads it. */
+        s3_cursor_visible = 1;
+        return 1;
+    }
+    if (!S3_DisplayWriteOffscreen(S3_HW_CURSOR_OFFSET, s3_cursor_pattern,
+                                  S3_HW_CURSOR_BYTES)) {
+        S3_TRACE_EVENT("SetCursor.fail", shape->csWidth, shape->csHeight);
+        return 0;
+    }
     S3_HwCursorSetup();
     S3_HwCursorMove((S3_I16)(s3_cursor_x - s3_cursor_hot_x),
                     (S3_I16)(s3_cursor_y - s3_cursor_hot_y));
@@ -302,20 +318,6 @@ S3_U16 S3_FAR S3_PASCAL SetCursor(void S3_FAR *cursor_shape)
     s3_cursor_visible = 1;
     return 1;
 }
-
-#if !defined(S3_HOST_TEST)
-/* The driver is compiled for the 386 (-3), so its code may use the upper
-   halves of 32-bit registers, which 16-bit interrupt handlers do not save.
-   Interrupt-time entries hand all of them back unchanged to whatever they
-   interrupted, which may be this driver's own drawing code. */
-void s3_push32(void);
-#pragma aux s3_push32 = 0x66 0x60;  /* pushad */
-void s3_pop32(void);
-#pragma aux s3_pop32 = 0x66 0x61;   /* popad */
-#else
-#define s3_push32()
-#define s3_pop32()
-#endif
 
 /* MoveCursor and CheckCursor run at mouse and timer interrupt time: they
    must not trace (file I/O would re-enter DOS). The hardware cursor needs
@@ -328,16 +330,16 @@ static void s3_move_cursor(S3_I16 x, S3_I16 y)
         S3_DisplaySwCursorMove(x, y);
         return;
     }
-    if (s3_cursor_visible) {
+    if (s3_cursor_visible && !S3_SwitchInBackground()) {
         S3_HwCursorMove((S3_I16)(x - s3_cursor_hot_x), (S3_I16)(y - s3_cursor_hot_y));
     }
 }
 
 void S3_FAR S3_PASCAL MoveCursor(S3_I16 x, S3_I16 y)
 {
-    s3_push32();
+    S3_PUSH32();
     s3_move_cursor(x, y);
-    s3_pop32();
+    S3_POP32();
 }
 
 static void s3_check_cursor(void)
@@ -347,12 +349,29 @@ static void s3_check_cursor(void)
 
 void S3_FAR S3_PASCAL CheckCursor(void)
 {
-    s3_push32();
+    S3_PUSH32();
     s3_check_cursor();
-    s3_pop32();
+    S3_POP32();
 }
 
 void S3_FAR S3_PASCAL UserRepaintDisable(S3_U16 disable)
 {
     S3_TRACE_EVENT("UserRepaintDisable", disable, 0);
+    S3_SwitchRepaintDisable(disable);
+}
+
+void S3_HwCursorRestore(void)
+{
+    if (!s3_cursor_visible) {
+        S3_HwCursorEnable(0);
+        return;
+    }
+    if (!S3_DisplayWriteOffscreen(S3_HW_CURSOR_OFFSET, s3_cursor_pattern,
+                                  S3_HW_CURSOR_BYTES)) {
+        return;
+    }
+    S3_HwCursorSetup();
+    S3_HwCursorMove((S3_I16)(s3_cursor_x - s3_cursor_hot_x),
+                    (S3_I16)(s3_cursor_y - s3_cursor_hot_y));
+    S3_HwCursorEnable(1);
 }

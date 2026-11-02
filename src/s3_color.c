@@ -178,6 +178,9 @@ S3_U32 S3_ColorInfoCore(S3_U32 color_in, S3_U32 S3_FAR *physical_out)
     if (physical_out == (S3_U32 S3_FAR *)0) {
         return color_in;
     }
+    /* No palette: PALETTERGB / PALETTEINDEX flag bytes are treated as the
+       plain RGB colour, so *physical_out is always written. */
+    color_in &= 0x00FFFFFFUL;
     if (!S3_RGBToColorIndex(color_in, &index)) {
         return color_in;
     }

@@ -1,0 +1,114 @@
+S3WIDE.DRV - widescreen / high-colour display driver for Windows 3.1 and 3.11
+==========================================================================
+
+What it is
+----------
+A Windows 3.1x display driver with two ways to drive the screen:
+
+- On an S3 Trio64 asked for 1280x720 in 256 colours, it programs the S3
+  chip directly (hardware mouse cursor).
+- Everything else goes through the VESA BIOS (VBE 2.0 or later with a
+  linear frame buffer): 8 bpp (256 colours), 16 bpp (65,536 colours) or
+  32 bpp (16.7 million colours), at any resolution the BIOS lists, up to
+  3840x2160 (4K) when the card or emulator offers it.
+
+It needs Windows 3.1 or 3.11 in 386 Enhanced Mode and a 386 or later.
+Nothing is stretched: Windows really runs at the resolution you choose.
+
+Files
+-----
+S3WIDE.DRV    the driver (copy to WINDOWS\SYSTEM)
+VBEMODES.EXE  DOS tool that lists the VESA modes of this machine and says
+              which ones S3WIDE.DRV can use (s3wide=yes)
+INSTALL.TXT   this file
+SHA256.TXT    checksums of the files
+
+This build contains cursor, icon and bitmap resources taken from a
+licensed copy of Microsoft's VGA.DRV. It is for testing on your own
+machine only; do not redistribute it.
+
+Before you install: keep a way back
+-----------------------------------
+1. Back up WINDOWS\SYSTEM.INI (for example: COPY SYSTEM.INI SYSTEM.BAK).
+2. If Windows does not come up with the new driver, start the machine to
+   the DOS prompt (do not run WIN), then restore the backup:
+       CD \WINDOWS
+       COPY SYSTEM.BAK SYSTEM.INI
+   or edit SYSTEM.INI with EDIT and set   display.drv=vga.drv   in [boot].
+
+Choose a mode
+-------------
+At the DOS prompt (before Windows), run
+    VBEMODES > MODES.TXT
+and read MODES.TXT. Each line is one mode, for example
+    MODE 112   640x480   32bpp ... s3wide=yes
+Pick a line that says s3wide=yes. If none do, the BIOS has no VBE 2.0
+linear frame buffer and only the S3 Trio64 1280x720x8 mode can work.
+
+Install
+-------
+1. Copy S3WIDE.DRV into WINDOWS\SYSTEM.
+2. Edit WINDOWS\SYSTEM.INI:
+
+   In [boot] change the display line to
+       display.drv=s3wide.drv
+   Leave the other [boot] lines (386grabber=vga.3gr, oemfonts.fon=...,
+   fonts.fon=..., fixedfon.fon=...) as they are for VGA.
+
+   In [386Enh] keep
+       display=*vddvga
+
+   Add a new section with the mode you picked, for example
+       [s3wide.drv]
+       Width=1920
+       Height=1080
+       Depth=16
+
+   Depth is 8, 16 or 32. Without this section the driver uses 1280x720x8.
+
+3. Start Windows (WIN).
+
+If the BIOS does not have the exact mode, the driver uses the largest
+mode it can draw that is no bigger than the one asked for, at the same
+depth if possible (on an S3 Trio64 it uses 1280x720x8 instead). The
+Windows title bars and fonts are the normal VGA-size ones, so very large
+modes make text small.
+
+DOSBox-X
+--------
+For 4K and true colour use DOSBox-X's own card:
+    [dosbox]
+    machine=svga_dosbox
+    [video]
+    vmemsize=64
+    vesa modelist width limit=0
+    vesa modelist height limit=0
+    allow high definition vesa modes=true
+3840x2160 at 32 bpp needs 33 MB of video memory; 1920x1080x32 fits in
+8 MB. The emulated S3 cards (svga_s3*) stop at 16 MB and 1920x1440.
+At 4K the emulator spends much of its time drawing its own window;
+[render] frameskip=10 helps on slower PCs.
+
+Pictures and video
+------------------
+Windows bitmaps (BMP/DIB) at 1, 4, 8 and 24 bits per pixel are drawn at
+every depth, including RLE-compressed 4- and 8-bit bitmaps. PNG, JPEG and
+GIF need a viewer program that understands them; Windows 3.1 itself does
+not. Video (AVI) needs Microsoft Video for Windows; it draws through the
+normal bitmap calls (no video overlay). In 256-colour mode the driver
+uses a fixed colour set (no palette changes), so photos look coarser
+than at 16 or 32 bpp.
+
+Known limits
+------------
+- Full-screen DOS programs: the driver sets its mode again and Windows
+  repaints when you come back. This was tested with a DOS session that
+  ends by itself, on both paths; switching with Alt+Tab or Alt+Enter
+  uses the same mechanism but was not exercised by hand.
+- A windowed DOS box was not tested.
+- All drawing is done by the processor; there is no 2D acceleration on
+  the VESA path. Full-screen fills at 4K take about a tenth to half a
+  second on an emulated ~100 MHz machine.
+- 15-bit (5:5:5) and 24-bit packed modes are not used.
+- Real hardware has not been tested; development used DOSBox-X 2026.08.31
+  with Windows for Workgroups 3.11.

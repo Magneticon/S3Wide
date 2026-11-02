@@ -43,5 +43,10 @@ void S3_SwCursorCheck(S3_SWCURSOR S3_FAR *cursor);
 void S3_SwCursorExclude(S3_SWCURSOR S3_FAR *cursor,
                         const S3_RECT16 S3_FAR *bounds);
 void S3_SwCursorUnexclude(S3_SWCURSOR S3_FAR *cursor);
+/* A DOS session takes the screen: hold the cursor and forget what it
+   covered, without touching the frame buffer. Resume (after the mode is
+   set again) releases the hold and draws it afresh. */
+void S3_SwCursorSuspend(S3_SWCURSOR S3_FAR *cursor);
+void S3_SwCursorResume(S3_SWCURSOR S3_FAR *cursor);
 
 #endif

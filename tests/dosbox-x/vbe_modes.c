@@ -5,7 +5,8 @@
  * marker in the last 64 KiB bank that holds the frame, and restores text mode.
  * A second argument ("hold") draws a 32 bpp test pattern over the whole
  * frame, writes READY.TXT and keeps the mode for 20 s for a screenshot.
- * Output goes to stdout; redirect it to a file.
+ * Output goes to stdout; redirect it to a file. Each MODE line ends with
+ * s3wide=yes when S3WIDE.DRV's VESA backend can use that mode.
  */
 #include <dos.h>
 #include <i86.h>
@@ -57,6 +58,25 @@ typedef struct VBE_MODE {
 
 static VBE_INFO info;
 static VBE_MODE mode;
+
+/* Whether S3WIDE.DRV's VESA backend can draw this mode (the rules of
+   S3_VbeModeMatches): supported graphics mode with a linear frame buffer,
+   8 bpp packed, 16 bpp 5:6:5 or 32 bpp with red at bit 16. */
+static int s3wide_usable(void)
+{
+    if ((mode.attributes & 0x91) != 0x91 || mode.phys_base == 0) return 0;
+    switch (mode.bits_per_pixel) {
+    case 8:
+        return mode.memory_model == 4;
+    case 16:
+        return mode.memory_model == 6 && mode.color_fields[0] == 5 &&
+               mode.color_fields[1] == 11 && mode.color_fields[2] == 6;
+    case 32:
+        return mode.memory_model == 6 && mode.color_fields[0] == 8 &&
+               mode.color_fields[1] == 16;
+    }
+    return 0;
+}
 static U16 modes[512];
 
 static U16 vbe(U16 ax, U16 bx, U16 cx, U16 dx, void __far *buffer)
@@ -217,11 +237,11 @@ int main(int argc, char **argv)
         if (!query_mode(modes[i])) continue;
         if (!(mode.attributes & 0x10) || mode.bits_per_pixel < 8) continue;
         printf("MODE %03X %5ux%-5u %2ubpp pitch=%5u model=%u attr=%04X "
-               "win=%uK/%uK lfb=%08lX\n",
+               "win=%uK/%uK lfb=%08lX s3wide=%s\n",
                modes[i], mode.x_resolution, mode.y_resolution,
                mode.bits_per_pixel, mode.bytes_per_scanline,
                mode.memory_model, mode.attributes, mode.win_granularity_kb,
-               mode.win_size_kb, mode.phys_base);
+               mode.win_size_kb, mode.phys_base, s3wide_usable() ? "yes" : "no");
     }
     printf("MODES %u\n", count);
     if (argc > 1) {

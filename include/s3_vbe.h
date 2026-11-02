@@ -35,12 +35,25 @@ void S3_VbeDecodeModeInfo(const S3_U8 S3_FAR *raw, S3_U16 vbe_version,
 int S3_VbeModeMatches(const S3_VBE_MODE_INFO S3_FAR *info, S3_U16 width,
                       S3_U16 height, S3_U16 bits_pixel);
 
+/* How well a decoded mode serves a request: 0 = unusable, larger is
+   better. An exact match scores S3_VBE_SCORE_EXACT. Otherwise a drawable
+   mode no larger than the request qualifies: the requested depth first,
+   then the larger area, then the deeper format. */
+#define S3_VBE_SCORE_EXACT 0xFFFFFFFFUL
+S3_U32 S3_VbeModeScore(const S3_VBE_MODE_INFO S3_FAR *info, S3_U16 width,
+                       S3_U16 height, S3_U16 bits_pixel);
+
 #if !defined(S3_HOST_TEST)
 /* Mode callbacks for the bridge: capture saves the current BIOS mode,
    program sets s3_mode.vbe_mode with its linear framebuffer (and the colour
    table at 8 bpp), restore returns to the saved mode. Selector callbacks
    come from S3_Win16NativeSelectorOps. */
 int S3_VbeModeOps(S3_BRIDGE_OPS S3_FAR *ops);
+
+/* Video BIOS mode through DPMI (INT 10h AH=0Fh / AH=00h). Setting a
+   standard mode also reloads its font and palette. */
+S3_U16 S3_BiosGetMode(void);
+void S3_BiosSetMode(S3_U16 mode);
 #endif
 
 #endif

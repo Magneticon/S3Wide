@@ -260,8 +260,32 @@ static int s3_enable_display(S3_PDEV S3_FAR *device, S3_U16 style)
         return 0;
     }
     s3_swcursor_start();
+    S3_SwitchStart();
     S3_TRACE_EVENT("Enable.device.ok", style, 0);
     return 1;
+}
+
+void S3_DisplaySuspend(void)
+{
+    if (s3_swcursor_active) S3_SwCursorSuspend(&s3_swcursor);
+}
+
+int S3_DisplayResume(void)
+{
+    S3_WIN16_BRIDGE S3_FAR *bridge = &s3_display_runtime.bridge;
+    int ok;
+    if (!s3_display_runtime.enabled || bridge->ops.program_mode == 0) return 0;
+    ok = bridge->ops.program_mode(bridge->ops.context);
+    /* The bank registers (S3) were reset with the mode: remap on next use. */
+    s3_display_runtime.surface.current_bank = 0xFFFFFFFFUL;
+    if (s3_mode.backend == S3_BACKEND_S3) {
+        S3_HwCursorRestore();
+    } else if (s3_swcursor_active) {
+        s3_cursor_surface.current_bank = 0xFFFFFFFFUL;
+        S3_SwCursorResume(&s3_swcursor);
+    }
+    S3_TRACE_EVENT("switch.resume", ok, 0);
+    return ok;
 }
 #endif
 
@@ -345,9 +369,8 @@ int S3_FAR S3_PASCAL GetDriverResourceID(int resource_id,
 
 int S3_FAR S3_PASCAL Disable(void S3_FAR *device)
 {
-    /* The ordinary Enable path remains fail-closed until a verified Windows
-       mode/I-O provider is available. If a future injected provider enabled
-       the device, keep bridge state intact when restore/free needs retry. */
+    /* Restore the mode Windows started from. A failed restore/free keeps
+       the bridge state so a later Disable can retry. */
     S3_TRACE_EVENT("Disable", 0, 0);
 #if !defined(S3_HOST_TEST)
     s3_swcursor_stop();
@@ -355,8 +378,12 @@ int S3_FAR S3_PASCAL Disable(void S3_FAR *device)
     if (!s3_display_runtime.initialized) {
         S3_DeviceRuntimeInit(&s3_display_runtime);
     }
-    return S3_DeviceDisableWithOps((S3_PDEV S3_FAR *)device,
-                                   &s3_display_runtime);
+    {
+        int result = S3_DeviceDisableWithOps((S3_PDEV S3_FAR *)device,
+                                             &s3_display_runtime);
+        S3_SwitchStop();
+        return result;
+    }
 }
 
 int S3_FAR S3_PASCAL LibMain(unsigned short instance,

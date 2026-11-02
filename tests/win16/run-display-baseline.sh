@@ -21,6 +21,8 @@
 #   WIN_ARGS   extra WIN.COM switches, for example /b for BOOTLOG.TXT
 #   DEMO       1 = DISPBASE.EXE restores Program Manager and opens Calculator
 #              and Notepad before capturing
+#   DOSRUN     1 = DISPBASE.EXE first runs COMMAND.COM /C VER (a DOS session
+#              that ends by itself) and waits for Windows to come back
 #   VESA_HD    1 = list HD and unlimited-size VESA modes (needed for the
 #              driver's VBE backend at 1280x720, 1920x1080, 3840x2160 ...)
 #   CYCLES     DOSBox-X cycles setting (default max); for timing runs with
@@ -67,6 +69,9 @@ else
 fi
 if [ "$DEMO" = 1 ]; then
     probe_args="$probe_args demo"
+fi
+if [ "${DOSRUN:-0}" = 1 ]; then
+    probe_args="$probe_args dosrun"
 fi
 
 if [ -e "$run" ]; then

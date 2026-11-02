@@ -23,6 +23,37 @@ void S3_DisplayUnexclude(int excluded);
 void S3_DisplaySetRect(S3_RECT16 S3_FAR *rect, S3_I32 left, S3_I32 top,
                        S3_I32 right, S3_I32 bottom);
 
+/* Full-screen DOS sessions (Enhanced Mode screen switching, s3_switch.c).
+   Start once the display is enabled, stop after it is disabled. While a DOS
+   session owns the screen, drawing on the display is skipped (Blocked is
+   nonzero for a call that involves the display) and USER repaints
+   everything when Windows gets the screen back. */
+void S3_SwitchStart(void);
+void S3_SwitchStop(void);
+int S3_SwitchInBackground(void);
+int S3_DisplayBlocked(const void S3_FAR *device, const void S3_FAR *other);
+void S3_SwitchRepaintDisable(S3_U16 disable);
+/* s3_exports.c: the screen is going to a DOS session / coming back (mode
+   set again, cursors restored). */
+void S3_DisplaySuspend(void);
+int S3_DisplayResume(void);
+/* s3_dda_entries.c: reload and re-enable the S3 hardware cursor. */
+void S3_HwCursorRestore(void);
+
+#if !defined(S3_HOST_TEST)
+/* The driver is compiled for the 386 (-3), so its code may use the upper
+   halves of 32-bit registers, which 16-bit interrupt handlers do not save.
+   Interrupt-time entries hand all of them back unchanged to whatever they
+   interrupted, which may be this driver's own drawing code. */
+void S3_PUSH32(void);
+#pragma aux S3_PUSH32 = 0x66 0x60;  /* pushad */
+void S3_POP32(void);
+#pragma aux S3_POP32 = 0x66 0x61;   /* popad */
+#else
+#define S3_PUSH32()
+#define S3_POP32()
+#endif
+
 /* Software cursor entry points (VBE backend). */
 int S3_DisplaySwCursorActive(void);
 int S3_DisplaySwCursorShape(const S3_CURSORSHAPE16 S3_FAR *shape);

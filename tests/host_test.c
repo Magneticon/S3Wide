@@ -9,6 +9,7 @@
 #include "s3_device.h"
 #include "s3_brush.h"
 #include "s3_raster.h"
+#include "s3_vbe.h"
 #include "s3_dib.h"
 #include "s3_text.h"
 #include "s3_output.h"
@@ -2299,6 +2300,291 @@ static void test_polyline_64k_banks(void)
     S3_ModeDefault(&s3_mode);
 }
 
+/* RLE8 and RLE4 DIBs: encoded and absolute runs, word padding, deltas
+   (skipped pixels stay unchanged), pixels past the width dropped, early end
+   of bitmap, clipping in SetDIBitsToDevice. 32 bpp, so a pixel's red byte
+   is the colour-table entry's red. */
+static S3_U32 rle_px(const S3_U8 *bits, unsigned x, unsigned y)
+{
+    return S3_PixelLoad(bits + y * 32 + x * 4, 4);
+}
+
+static void test_rle_dibs(void)
+{
+    static const S3_U8 rle8[] = {
+        0x03, 0x01, 0x00, 0x03, 0x02, 0x03, 0x04, 0x00, 0x02, 0x05, 0x00, 0x00,
+        0x00, 0x02, 0x02, 0x00, 0x02, 0x06, 0x0A, 0x09, 0x00, 0x00,
+        0x02, 0x07, 0x00, 0x02, 0x03, 0x01,
+        0x01, 0x08, 0x00, 0x01
+    };
+    static const S3_U8 rle4[] = {
+        0x05, 0x12, 0x00, 0x03, 0x34, 0x50, 0x00, 0x00,
+        0x00, 0x05, 0x67, 0x89, 0xA0, 0x00, 0x00, 0x00,
+        0x00, 0x01
+    };
+    struct {
+        S3_BITMAPINFOHEADER16 header;
+        S3_RGBQUAD16 colors[256];
+    } info;
+    S3_BITMAP16 bitmap;
+    S3_U8 bits[8 * 4 * 4];
+    S3_U8 big[8 * 4 * 6];
+    S3_DIB_FORMAT format;
+    S3_RECT16 clip = {3, 0, 6, 6};
+    unsigned i, x;
+    const S3_U32 old = 0x11111111UL;
+
+    CHECK(S3_ModeSetVBE(&s3_mode, 640, 480, 32, 2560, 0x112, 0xE0000000UL));
+    memset(&info, 0, sizeof(info));
+    info.header.biSize = sizeof(S3_BITMAPINFOHEADER16);
+    info.header.biWidth = 8;
+    info.header.biHeight = 4;
+    info.header.biPlanes = 1;
+    info.header.biBitCount = 8;
+    info.header.biCompression = 1;
+    info.header.biSizeImage = sizeof(rle8);
+    for (i = 0; i < 256; ++i) info.colors[i].rgbRed = (S3_U8)(i * 16 + 1);
+    CHECK(S3_DibFormat((S3_BITMAPINFO16 *)&info, &format) && format.compression == 1);
+
+    memset(&bitmap, 0, sizeof(bitmap));
+    bitmap.bmWidth = 8;
+    bitmap.bmHeight = 4;
+    bitmap.bmWidthBytes = 32;
+    bitmap.bmPlanes = 1;
+    bitmap.bmBitsPixel = 32;
+    bitmap.bmBits = bits;
+    memset(bits, 0x11, sizeof(bits));
+    CHECK(S3_DibBitmapBits(&bitmap, 0, 0, 4, (S3_U8 *)rle8, (S3_BITMAPINFO16 *)&info) == 4);
+    /* Scan 0 (bitmap row 3): 1 1 1 | 2 3 4 | 5 5 */
+    {
+        static const S3_U8 scan0[8] = {1, 1, 1, 2, 3, 4, 5, 5};
+        for (x = 0; x < 8; ++x) CHECK(rle_px(bits, x, 3) == ((S3_U32)(scan0[x] * 16 + 1) << 16));
+    }
+    /* Scan 1 (row 2): delta 2, then 6 6, then 9 to the edge. */
+    CHECK(rle_px(bits, 0, 2) == old && rle_px(bits, 1, 2) == old);
+    CHECK(rle_px(bits, 2, 2) == (0x61UL << 16) && rle_px(bits, 3, 2) == (0x61UL << 16));
+    for (x = 4; x < 8; ++x) CHECK(rle_px(bits, x, 2) == (0x91UL << 16));
+    /* Scan 2 (row 1): 7 7, then a delta to scan 3 column 5. */
+    CHECK(rle_px(bits, 0, 1) == (0x71UL << 16) && rle_px(bits, 1, 1) == (0x71UL << 16));
+    for (x = 2; x < 8; ++x) CHECK(rle_px(bits, x, 1) == old);
+    /* Scan 3 (row 0): only column 5. */
+    for (x = 0; x < 8; ++x) CHECK(rle_px(bits, x, 0) == (x == 5 ? (0x81UL << 16) : old));
+
+    /* Later scans only: scans 0 and 1 are decoded but not written. */
+    memset(bits, 0x11, sizeof(bits));
+    CHECK(S3_DibBitmapBits(&bitmap, 0, 2, 2, (S3_U8 *)rle8, (S3_BITMAPINFO16 *)&info) == 2);
+    CHECK(rle_px(bits, 0, 3) == old && rle_px(bits, 0, 2) == old);
+    CHECK(rle_px(bits, 0, 1) == (0x71UL << 16) && rle_px(bits, 5, 0) == (0x81UL << 16));
+
+    /* No RLE output from GetDIBits; RLE needs biSizeImage and its depth. */
+    CHECK(S3_DibBitmapBits(&bitmap, 1, 0, 4, bits, (S3_BITMAPINFO16 *)&info) == 0);
+    info.header.biSizeImage = 0;
+    CHECK(!S3_DibFormat((S3_BITMAPINFO16 *)&info, &format));
+    info.header.biSizeImage = sizeof(rle8);
+    info.header.biCompression = 2;
+    CHECK(!S3_DibFormat((S3_BITMAPINFO16 *)&info, &format));
+
+    /* SetDIBitsToDevice path at x = 2 into a wider bitmap, clipped to
+       columns 3..5: DIB columns 1..3 of each scan land there. */
+    info.header.biCompression = 1;
+    bitmap.bmWidth = 8;
+    bitmap.bmHeight = 6;
+    bitmap.bmBits = big;
+    memset(big, 0x11, sizeof(big));
+    CHECK(S3_DibToDevice(&bitmap, 2, 1, 0, 4, &clip, rle8, (S3_BITMAPINFO16 *)&info) == 4);
+    CHECK(rle_px(big, 2, 4) == old && rle_px(big, 6, 4) == old);   /* clipped */
+    CHECK(rle_px(big, 3, 4) == (0x11UL << 16));                    /* scan 0, DIB x 1 */
+    CHECK(rle_px(big, 5, 4) == (0x21UL << 16));                    /* scan 0, DIB x 3 */
+    CHECK(rle_px(big, 3, 3) == old && rle_px(big, 4, 3) == (0x61UL << 16));
+    CHECK(rle_px(big, 3, 2) == (0x71UL << 16) && rle_px(big, 4, 2) == old);
+
+    /* RLE4: nibble runs, odd absolute run padded to a word, end of bitmap. */
+    info.header.biBitCount = 4;
+    info.header.biCompression = 2;
+    info.header.biSizeImage = sizeof(rle4);
+    info.header.biClrUsed = 16;
+    info.header.biHeight = 4;
+    bitmap.bmHeight = 4;
+    bitmap.bmBits = bits;
+    memset(bits, 0x11, sizeof(bits));
+    CHECK(S3_DibBitmapBits(&bitmap, 0, 0, 4, (S3_U8 *)rle4, (S3_BITMAPINFO16 *)&info) == 4);
+    {
+        static const S3_U8 scan0[8] = {1, 2, 1, 2, 1, 3, 4, 5};
+        static const S3_U8 scan1[5] = {6, 7, 8, 9, 10};
+        for (x = 0; x < 8; ++x) CHECK(rle_px(bits, x, 3) == ((S3_U32)(scan0[x] * 16 + 1) << 16));
+        for (x = 0; x < 5; ++x) CHECK(rle_px(bits, x, 2) == ((S3_U32)(scan1[x] * 16 + 1) << 16));
+        for (x = 5; x < 8; ++x) CHECK(rle_px(bits, x, 2) == old);
+        for (x = 0; x < 8; ++x) CHECK(rle_px(bits, x, 1) == old && rle_px(bits, x, 0) == old);
+    }
+
+    /* A truncated stream stops cleanly. */
+    info.header.biSizeImage = 3;
+    memset(bits, 0x11, sizeof(bits));
+    CHECK(S3_DibBitmapBits(&bitmap, 0, 0, 4, (S3_U8 *)rle4, (S3_BITMAPINFO16 *)&info) == 4);
+    CHECK(rle_px(bits, 0, 3) == (0x11UL << 16) && rle_px(bits, 5, 3) == old);
+    S3_ModeDefault(&s3_mode);
+}
+
+/* VBE mode choice: exact first; otherwise the largest drawable mode no
+   larger than the request, at the requested depth before any other. */
+static S3_VBE_MODE_INFO vbe_info(S3_U16 w, S3_U16 h, S3_U16 bpp)
+{
+    S3_VBE_MODE_INFO info;
+    memset(&info, 0, sizeof(info));
+    info.attributes = S3_VBE_ATTR_SUPPORTED | S3_VBE_ATTR_GRAPHICS | S3_VBE_ATTR_LFB;
+    info.width = w;
+    info.height = h;
+    info.bits_pixel = bpp;
+    info.pitch = (S3_U16)(w * (bpp / 8));
+    info.lfb_physical = 0xE0000000UL;
+    info.memory_model = bpp == 8 ? S3_VBE_MODEL_PACKED : S3_VBE_MODEL_DIRECT;
+    info.red_mask_size = bpp == 16 ? 5 : 8;
+    info.red_position = bpp == 16 ? 11 : 16;
+    info.green_mask_size = bpp == 16 ? 6 : 8;
+    return info;
+}
+
+static void test_vbe_mode_score(void)
+{
+    S3_VBE_MODE_INFO exact = vbe_info(1280, 720, 32);
+    S3_VBE_MODE_INFO big32 = vbe_info(1024, 768, 32);
+    S3_VBE_MODE_INFO small32 = vbe_info(800, 600, 32);
+    S3_VBE_MODE_INFO big16 = vbe_info(1280, 720, 16);
+    S3_VBE_MODE_INFO wide8 = vbe_info(1280, 720, 8);
+    S3_VBE_MODE_INFO too_big = vbe_info(1920, 1080, 32);
+    S3_VBE_MODE_INFO no_lfb = vbe_info(800, 600, 32);
+    S3_VBE_MODE_INFO rgb555 = vbe_info(1024, 768, 16);
+
+    no_lfb.attributes &= (S3_U16)~S3_VBE_ATTR_LFB;
+    rgb555.red_mask_size = 5;
+    rgb555.red_position = 10;
+    rgb555.green_mask_size = 5;
+    CHECK(S3_VbeModeScore(&exact, 1280, 720, 32) == S3_VBE_SCORE_EXACT);
+    /* 1280x720x32 asked for: 1024x768 does not fit (768 > 720). */
+    CHECK(S3_VbeModeScore(&big32, 1280, 720, 32) == 0);
+    CHECK(S3_VbeModeScore(&too_big, 1280, 720, 32) == 0);
+    CHECK(S3_VbeModeScore(&no_lfb, 1280, 720, 32) == 0);
+    CHECK(S3_VbeModeScore(&rgb555, 1280, 800, 16) == 0);
+    CHECK(S3_VbeModeScore(&small32, 1280, 720, 32) != 0);
+    /* Same depth beats a larger mode at another depth; then area, then depth. */
+    CHECK(S3_VbeModeScore(&small32, 1280, 720, 32) > S3_VbeModeScore(&big16, 1280, 720, 32));
+    CHECK(S3_VbeModeScore(&big16, 1280, 720, 32) > S3_VbeModeScore(&wide8, 1280, 720, 32));
+    CHECK(S3_VbeModeScore(&big16, 1280, 720, 24) > S3_VbeModeScore(&small32, 1280, 720, 24));
+}
+
+/* A monochrome pattern brush draws 0 bits in the text colour and 1 bits
+   in the background colour of the DRAWMODE; black and white without one. */
+static void test_mono_pattern_colours(void)
+{
+    S3_BITMAP16 pattern, target;
+    S3_U8 pattern_bits[8 * 2];
+    S3_U8 bits[8 * 4 * 2];
+    S3_PBRUSH16 brush;
+    S3_DRAWMODE16 mode;
+    unsigned x;
+
+    CHECK(S3_ModeSetVBE(&s3_mode, 640, 480, 32, 2560, 0x112, 0xE0000000UL));
+    memset(&pattern, 0, sizeof(pattern));
+    memset(pattern_bits, 0xF0, sizeof(pattern_bits));  /* columns 0-3 set */
+    pattern.bmWidth = 8;
+    pattern.bmHeight = 8;
+    pattern.bmWidthBytes = 2;
+    pattern.bmPlanes = 1;
+    pattern.bmBitsPixel = 1;
+    pattern.bmBits = pattern_bits;
+    memset(&brush, 0, sizeof(brush));
+    brush.style = S3_BS_PATTERN;
+    CHECK(S3_RealizePatternBrush(&pattern, &brush) && brush.mono == 1);
+
+    memset(&target, 0, sizeof(target));
+    target.bmWidth = 8;
+    target.bmHeight = 2;
+    target.bmWidthBytes = 32;
+    target.bmPlanes = 1;
+    target.bmBitsPixel = 32;
+    target.bmBits = bits;
+    memset(&mode, 0, sizeof(mode));
+    mode.TextColor = 0x00FF0000UL;   /* physical red (0x00RRGGBB) */
+    mode.bkColor = 0x000000FFUL;     /* physical blue */
+    CHECK(S3_RasterBitBlt(&target, 0, 0, (void *)0, 0, 0, 8, 2, 0x00F00021UL,
+                          &brush, &mode));
+    for (x = 0; x < 8; ++x) {
+        CHECK(S3_PixelLoad(bits + x * 4, 4) == (x < 4 ? 0x000000FFUL : 0x00FF0000UL));
+    }
+    CHECK(S3_RasterBitBlt(&target, 0, 0, (void *)0, 0, 0, 8, 2, 0x00F00021UL,
+                          &brush, (S3_DRAWMODE16 *)0));
+    CHECK(S3_PixelLoad(bits, 4) == 0x00FFFFFFUL && S3_PixelLoad(bits + 28, 4) == 0);
+    S3_ModeDefault(&s3_mode);
+}
+
+/* DIBs wider than one row buffer (4096 pixels) convert in pieces, both
+   ways, and a visible part may start inside a 1-bpp byte. */
+static void test_wide_dibs(void)
+{
+    static S3_U8 dib24[5000 * 3];
+    static S3_U8 back[5000 * 3 + 4];
+    static S3_U8 device[5000 * 4];
+    static S3_U8 dib1[9000 / 8 + 8];
+    struct {
+        S3_BITMAPINFOHEADER16 header;
+        S3_RGBQUAD16 colors[2];
+    } info;
+    S3_BITMAP16 bitmap;
+    unsigned i;
+
+    CHECK(S3_ModeSetVBE(&s3_mode, 640, 480, 32, 2560, 0x112, 0xE0000000UL));
+    for (i = 0; i < sizeof(dib24); ++i) dib24[i] = (S3_U8)(i * 7 + (i >> 8));
+    memset(&info, 0, sizeof(info));
+    info.header.biSize = sizeof(S3_BITMAPINFOHEADER16);
+    info.header.biWidth = 5000;
+    info.header.biHeight = 1;
+    info.header.biPlanes = 1;
+    info.header.biBitCount = 24;
+    memset(&bitmap, 0, sizeof(bitmap));
+    bitmap.bmWidth = 5000;
+    bitmap.bmHeight = 1;
+    bitmap.bmWidthBytes = 20000;
+    bitmap.bmPlanes = 1;
+    bitmap.bmBitsPixel = 32;
+    bitmap.bmBits = device;
+    CHECK(S3_DibBitmapBits(&bitmap, 0, 0, 1, dib24, (S3_BITMAPINFO16 *)&info) == 1);
+    for (i = 0; i < 5000; i += 499) {
+        CHECK(device[i * 4] == dib24[i * 3] && device[i * 4 + 2] == dib24[i * 3 + 2]);
+    }
+    CHECK(device[4999 * 4 + 1] == dib24[4999 * 3 + 1]);
+    memset(back, 0xAA, sizeof(back));
+    CHECK(S3_DibBitmapBits(&bitmap, 1, 0, 1, back, (S3_BITMAPINFO16 *)&info) == 1);
+    CHECK(memcmp(back, dib24, sizeof(dib24)) == 0);
+    CHECK(back[sizeof(dib24)] == 0xAA);  /* 15000 bytes: no padding */
+
+    /* 9000-pixel 1-bpp DIB at x = -4101: columns 4101 .. 9000 visible;
+       4101 is bit 5 of byte 512. Bit k of the DIB is set when k % 3 == 0. */
+    memset(dib1, 0, sizeof(dib1));
+    for (i = 0; i < 9000; i += 3) dib1[i >> 3] |= (S3_U8)(0x80U >> (i & 7));
+    info.header.biWidth = 9000;
+    info.header.biBitCount = 1;
+    info.header.biClrUsed = 2;
+    info.colors[1].rgbRed = 0xFF;
+    bitmap.bmWidth = 4899;
+    bitmap.bmWidthBytes = 4899 * 4;
+    memset(device, 0x11, sizeof(device));
+    CHECK(S3_DibToDevice(&bitmap, -4101, 0, 0, 1, (S3_RECT16 *)0, dib1,
+                         (S3_BITMAPINFO16 *)&info) == 1);
+    for (i = 0; i < 4899; ++i) {
+        CHECK(S3_PixelLoad(device + i * 4, 4) == ((i + 4101) % 3 == 0 ? 0x00FF0000UL : 0));
+    }
+
+    /* A copy within one bitmap, wider than a row buffer, moving right:
+       chunks run right to left, so every source pixel is read intact. */
+    bitmap.bmWidth = 5000;
+    bitmap.bmWidthBytes = 20000;
+    for (i = 0; i < 5000; ++i) S3_PixelStore(device + i * 4, i, 4);
+    CHECK(S3_RasterBitBlt(&bitmap, 100, 0, &bitmap, 0, 0, 4900, 1, 0x00CC0020UL,
+                          (const S3_PBRUSH16 *)0, (const S3_DRAWMODE16 *)0));
+    for (i = 0; i < 4900; ++i) CHECK(S3_PixelLoad(device + (i + 100) * 4, 4) == i);
+    S3_ModeDefault(&s3_mode);
+}
+
 /* The row ROP (words, unrolled cases) matches the per-value ROP3 for every
    code, including an odd trailing byte and NULL unused operands. */
 static void test_rop_bytes(void)
@@ -2485,6 +2771,10 @@ int main(void)
     test_realized_brushes();
     test_raster_rop3_and_targets();
     test_rop_bytes();
+    test_wide_dibs();
+    test_mono_pattern_colours();
+    test_vbe_mode_score();
+    test_rle_dibs();
     test_polyline_64k_banks();
     test_direct_colour_depths();
     test_dib_conversions();
